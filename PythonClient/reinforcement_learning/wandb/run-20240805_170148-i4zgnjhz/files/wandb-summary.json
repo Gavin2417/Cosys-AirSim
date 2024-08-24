@@ -1,0 +1,1 @@
+{"timesteps": 8149, "reward": -0.5, "done": 0, "collision": 0, "truncated": 0, "_timestamp": 1722883027.691582, "_runtime": 12919.035018920898, "_step": 8148, "episode_reward": -0.4, "episode_length": 4, "_wandb": {"runtime": 12919}}

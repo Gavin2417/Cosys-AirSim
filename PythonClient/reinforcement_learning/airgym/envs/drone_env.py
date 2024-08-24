@@ -5,8 +5,8 @@ import math
 import time
 from argparse import ArgumentParser
 
-import gym
-from gym import spaces
+import gymnasium
+from gymnasium import spaces
 from airgym.envs.airsim_env import AirSimEnv
 
 

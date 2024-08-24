@@ -1,6 +1,3 @@
-# Python client example to get lidar data 
-#
-
 import setup_path
 import cosysairsim as airsim
 import numpy as np
@@ -19,10 +16,10 @@ class lidarTest:
 
     def get_data(self, gpulidar):
 
-        # # get lidar data
+        # get lidar data
         if gpulidar:
             lidarData = self.client.getGPULidarData(self.lidarName, self.vehicleName)
-
+          
             if lidarData.time_stamp != self.lastlidarTimeStamp:
                 # Check if there are any points in the data
                 if len(lidarData.point_cloud) < 5:
@@ -33,7 +30,7 @@ class lidarTest:
 
                     points = np.array(lidarData.point_cloud, dtype=np.dtype('f4'))
                     points = np.reshape(points, (int(points.shape[0] / 5), 5))
-                    print("got " + str(points.shape[0]) + " points")
+                    
                     return points
             else:
                 return None
@@ -51,7 +48,7 @@ class lidarTest:
                     points = np.array(lidarData.point_cloud, dtype=np.dtype('f4'))
                     points = np.reshape(points, (int(points.shape[0] / 3), 3))
                     points = points * np.array([1, -1, -1])
-                    print("got " + str(points.shape[0]) + " points")
+                    
                     return points
             else:
                 return None
@@ -65,17 +62,25 @@ class lidarTest:
 # main
 if __name__ == "__main__":
 
-    lidarTest = lidarTest('lidar2', 'airsimvehicle')
+    lidarTest = lidarTest('gpulidar1', 'CPHusky')
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
     gpulidar = True
+    while True:
+        # move forward
+        lidarTest.client.enableApiControl(True, 'CPHusky')
+        lidarTest.client.setCarControls(airsim.CarControls(throttle=0.5, steering=0.5), 'CPHusky')
 
-    points = lidarTest.get_data(gpulidar)
-    ax.set_box_aspect((np.ptp(points[:, 0]), np.ptp(points[:, 1]), np.ptp(points[:, 2])))
-    ax.scatter(points[:, 0], points[:, 1], points[:, 2])
-    ax.set_xlabel('X Label')
-    ax.set_ylabel('Y Label')
-    ax.set_zlabel('Z Label')
-    ax.set_xlim((-5, 5))
-    ax.set_ylim((-5, 5))
-    plt.show()
+        points = lidarTest.get_data(gpulidar)
+
+        # Check if points is None before proceeding
+        if points is not None:
+            print(points)
+            print(f"Number of points: {len(points)}")
+            
+            # You can add code here to plot or process the points
+            ax.scatter(points[:, 0], points[:, 1], points[:, 2])
+            plt.pause(0.001)
+            ax.cla()
+        else:
+            print("No points")

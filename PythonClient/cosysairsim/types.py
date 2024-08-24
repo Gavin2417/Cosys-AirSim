@@ -407,10 +407,6 @@ class EnvironmentState(MsgpackMixin):
     temperature = 0.0
     air_density = 0.0
 
-class ComputerVisionState(MsgpackMixin):
-    kinematics_estimated = KinematicsState()
-    timestamp = np.uint64(0)
-
 class CarState(MsgpackMixin):
     speed = 0.0
     gear = 0
