@@ -1,0 +1,53 @@
+{
+    "os": "Windows-11-10.0.22631-SP0",
+    "python": "3.12.4",
+    "heartbeatAt": "2024-08-05T13:13:06.858301",
+    "startedAt": "2024-08-05T13:13:06.050311",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "C:\\Users\\gavin\\OneDrive\\Desktop\\simulation\\Cosys-AirSim\\PythonClient\\reinforcement_learning\\dqn_car.py",
+    "codePathLocal": "dqn_car.py",
+    "codePath": "PythonClient\\reinforcement_learning\\dqn_car.py",
+    "git": {
+        "remote": "https://github.com/Cosys-Lab/Cosys-AirSim.git",
+        "commit": "a7827c8b24ac980834da822ba50c0a9332b28c49"
+    },
+    "email": "gavinchen2001@gmail.com",
+    "root": "C:/Users/gavin/OneDrive/Desktop/simulation/Cosys-AirSim",
+    "host": "superhero",
+    "username": "gavin",
+    "executable": "C:\\Users\\gavin\\.conda\\envs\\airEnv\\python.exe",
+    "cpu_count": 6,
+    "cpu_count_logical": 12,
+    "cpu_freq": {
+        "current": 4701.0,
+        "min": 0.0,
+        "max": 4701.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 4701.0,
+            "min": 0.0,
+            "max": 4701.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 953.0039024353027,
+            "used": 329.08392333984375
+        }
+    },
+    "gpu": "NVIDIA GeForce RTX 3070",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 3070",
+            "memory_total": 8589934592
+        }
+    ],
+    "memory": {
+        "total": 31.188549041748047
+    }
+}

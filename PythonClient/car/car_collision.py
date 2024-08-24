@@ -15,7 +15,7 @@ client.reset()
 client.simPrintLogMessage("Hello", "345", 2)
 
 # go forward
-car_controls.throttle = 0.5
+car_controls.throttle = 0.2
 car_controls.steering = 0
 client.setCarControls(car_controls)
 
