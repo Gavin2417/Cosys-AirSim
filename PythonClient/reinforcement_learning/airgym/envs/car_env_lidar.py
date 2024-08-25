@@ -183,7 +183,8 @@ class AirSimCarEnvLidar(AirSimEnv):
             'lidar': lidar_data,
             'Pose': pose
         }
-
+    def compte_prev_dist(self, start_pt, goal_pt):
+        self.prev_dist = np.linalg.norm(start_pt - goal_pt)
     def _compute_reward(self):
         MAX_SPEED = 300
         MIN_SPEED = 10
@@ -191,45 +192,47 @@ class AirSimCarEnvLidar(AirSimEnv):
         BETA = 3
 
         # Single goal point
-        goal_pt = np.array([4.5, 4.5, 0])
-        start_pt = np.array([0, 0, 0])
-        intial_dist = np.linalg.norm(start_pt - goal_pt)
+        goal_pt = np.array([5.5, 5.5, 0.8])
+        start_pt = np.array([0, 0, 0.8])
+        initial_dist = np.linalg.norm(start_pt - goal_pt)  # Corrected typo
         
         car_pt = self.state["pose"].position.to_numpy_array()
 
         # Calculate Euclidean distance to the goal point
         dist = np.linalg.norm(car_pt - goal_pt)
-        distance_reward = 0
-        if dist > intial_dist:
-            distance_reward = -3
-        else:
-            if dist < self.prev_dist:
-                distance_reward = 2
-            else:
-                distance_reward = -2
+
+        # Initialize self.prev_dist if this is the first step
+        if self.prev_dist is None:
+            self.prev_dist = initial_dist
+        # Exponential reward based on distance reduction
+        distance_reward = 10 * np.exp(-(dist / initial_dist)) * (self.prev_dist - dist)
+        # Update previous distance
         self.prev_dist = dist
 
+        # Terminal conditions
         done = False
         truncated = False
-       
         
+        # If the goal is reached
         if dist <= THRESH_DIST:
-            distance_reward = 10
-            done = True
-            self.prev_dist = 9999999
+            distance_reward = 20  # Reward for reaching the goal
+            done = True  # Mark episode as done
+            self.prev_dist = None  # Reset for next episode
             truncated = False
-        else:
-            if self.car_controls.brake == 0 and self.car_state.speed <= 0.5:
-                distance_reward = -10
-                done = False
-                truncated = True
-                self.prev_dist = 9999999
-            if self.state["collision"]:
-                distance_reward = -10
-                done = False
-                self.prev_dist = 9999999
-                truncated = True
-
+        
+        # Handling braking and speed condition
+        elif self.car_controls.brake == 0 and self.car_state.speed <= 0.5:
+            distance_reward = -10  # Penalty for stalling
+            done = False
+            truncated = True  # Mark the episode as truncated
+            self.prev_dist = None  # Reset for next episode
+        
+        # Handling collision
+        elif self.state["collision"]:
+            distance_reward = -10  # Penalty for collision
+            done = False
+            truncated = True  # Mark episode as truncated
+            self.prev_dist = None  # Reset for next episode
         return distance_reward, done, truncated
 
     def step(self, action):
@@ -259,4 +262,5 @@ class AirSimCarEnvLidar(AirSimEnv):
         
         self._setup_car()
         self._do_action(1)
+        self.compte_prev_dist(np.array([0, 0, 0.8]), np.array([5.5, 5.5, 0.8]))
         return self._get_obs(), {}
