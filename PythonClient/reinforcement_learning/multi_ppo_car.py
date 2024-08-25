@@ -88,7 +88,7 @@ kwargs["callback"] = callbacks
 
 # Train for a certain number of timesteps
 model.learn(
-    total_timesteps=6e5, 
+    total_timesteps=30000, 
     tb_log_name="ppo_airsim_car_run_" + str(time.time()), 
     log_interval=1,  # Logs every 10 iterations
     **kwargs
