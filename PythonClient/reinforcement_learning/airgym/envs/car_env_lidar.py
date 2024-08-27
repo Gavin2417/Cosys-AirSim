@@ -141,8 +141,8 @@ class AirSimCarEnvLidar(AirSimEnv):
         im_final = image.resize((84, 84)).convert("L")
 
         # save image into a file
-        # self.num += 1
-        # im_final.save(f"C:/Users/gavin/OneDrive/Documents/AirSim/test/image_{self.num}.png")
+        self.num += 1
+        im_final.save(f"C:/Users/gavin/OneDrive/Documents/AirSim/test/image_{self.num}.png")
 
         return np.array(im_final).reshape([84, 84, 1])
 
