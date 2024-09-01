@@ -193,7 +193,7 @@ class AirSimCarEnvLidar(AirSimEnv):
 
         # Single goal point
         goal_pt = np.array([5.5, 5.5, 0.8])
-        start_pt = np.array([0, 0, 0.8])
+        start_pt = np.array([-5,0, 0.8])
         initial_dist = np.linalg.norm(start_pt - goal_pt)  # Corrected typo
         
         car_pt = self.state["pose"].position.to_numpy_array()
