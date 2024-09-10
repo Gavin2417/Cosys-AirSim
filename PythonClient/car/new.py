@@ -2,6 +2,10 @@
 import cosysairsim as airsim
 import numpy as np
 import matplotlib.pyplot as plt
+import open3d as o3d
+import time
+from linefit import ground_seg
+import os
 
 class lidarTest:
     
@@ -21,7 +25,7 @@ class lidarTest:
             lidarData = self.client.getLidarData(self.lidarName, self.vehicleName)
 
         if lidarData.time_stamp != self.lastlidarTimeStamp:
-            if len(lidarData.point_cloud) < 5:
+            if len(lidarData.point_cloud) < 2:
                 self.lastlidarTimeStamp = lidarData.time_stamp
                 return None
             else:
@@ -31,73 +35,118 @@ class lidarTest:
                 num_dims = 5 if gpulidar else 3
                 points = np.reshape(points, (int(points.shape[0] / num_dims), num_dims))
                 if not gpulidar:
-                    points = points * np.array([1, -1, -1])  # Adjust for AirSim coordinates
-                return points
+                    points = points * np.array([1, -1, 1])  # Adjust for AirSim coordinates
+                return points, lidarData.time_stamp  # Return timestamp with data
         else:
-            return None
+            return None, None
 
-    def segment_ground(self, point_cloud):
-        # Simple ground segmentation based on height (e.g., points with Z < a threshold)
-        ground_threshold = 0.5  # Customize threshold based on environment
-        ground_points = point_cloud[point_cloud[:, 2] > ground_threshold]
-        obstacle_points = point_cloud[point_cloud[:, 2] <= ground_threshold]
-        return ground_points, obstacle_points
+class GridMap:
+    def __init__(self, resolution):
+        self.resolution = resolution
+        self.grid = {}
 
-    def build_elevation_map(self, ground_points, grid_resolution=0.1):
-        # Generate a 2.5D elevation map from the ground points
-        x_min, y_min = np.min(ground_points[:, :2], axis=0)
-        x_max, y_max = np.max(ground_points[:, :2], axis=0)
+    def get_grid_cell(self, x, y):
+        # Convert x, y coordinates to grid cell indices
+        grid_x = int(x // self.resolution)
+        grid_y = int(y // self.resolution)
+        return grid_x, grid_y
+
+    def add_point(self, x, y, z, rgb, intensity, timestamp):
+        # Get grid cell for the point
+        cell = self.get_grid_cell(x, y)
         
-        x_bins = np.arange(x_min, x_max, grid_resolution)
-        y_bins = np.arange(y_min, y_max, grid_resolution)
-        height_map = np.zeros((len(x_bins), len(y_bins)))
+        if cell not in self.grid:
+            self.grid[cell] = []
         
-        for point in ground_points:
-            x_idx = np.searchsorted(x_bins, point[0]) - 1
-            y_idx = np.searchsorted(y_bins, point[1]) - 1
-            height_map[x_idx, y_idx] = max(height_map[x_idx, y_idx], point[2])
+        # Store point with rgb, intensity, and timestamp
+        self.grid[cell].append((x, y, z, rgb, intensity, timestamp))
 
-        smoothed_height_map = gaussian_filter(height_map, sigma=1)
-        return smoothed_height_map
-
-    def compute_risk_map(self, height_map):
-        # Example risk map based on height differences
-        risk_map = np.abs(np.gradient(height_map)[0])  # Gradient of the height map
-        return risk_map
-
-    def plot_maps(self, height_map, risk_map):
-        # Visualize the height map and risk map
-        plt.figure(figsize=(12, 6))
-        plt.subplot(1, 2, 1)
-        plt.title("Elevation Map")
-        plt.imshow(height_map, cmap='terrain')
-        plt.colorbar(label='Height')
-
-        plt.subplot(1, 2, 2)
-        plt.title("Risk Map")
-        plt.imshow(risk_map, cmap='hot')
-        plt.colorbar(label='Risk')
-        plt.show()
-
-    def stop(self):
-        self.client.reset()
-        print("Stopped!\n")
-
-
-# main
-if __name__ == "__main__":
-
-    lidar_test = lidarTest('gpulidar1', 'CPHusky')
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    while True:
-        points = lidar_test.get_data(gpulidar=True)
-        if points is not None:
-            ground_points, obstacle_points = lidar_test.segment_ground(points)
-            # plot the ground points
-            ax.clear()
-            ax.scatter(ground_points[:, 0], ground_points[:, 1], ground_points[:, 2], c='g', s=1)
-            ax.scatter(obstacle_points[:, 0], obstacle_points[:, 1], obstacle_points[:, 2], c='r', s=1)
-            plt.pause(0.01)
+    def sort_cells_by_time(self):
+        # Sort points in each cell by timestamp
+        for cell in self.grid:
+            self.grid[cell].sort(key=lambda p: p[5])  # Sort by timestamp (6th element)
     
-            
+    def get_average_point_per_cell(self):
+        # Return the average point (x, y, z) for each cell
+        averaged_points = []
+        colors = []
+        for cell, points in self.grid.items():
+            # Average x, y, z
+            avg_point = np.mean([p[:3] for p in points], axis=0)
+            avg_rgb = np.mean([p[3] for p in points], axis=0)
+            averaged_points.append(avg_point)
+            colors.append(avg_rgb / 255.0)  # Normalize to [0, 1] for RGB
+        return np.array(averaged_points), np.array(colors)
+
+# Main
+if __name__ == "__main__":
+    # Initialize Lidar test
+    lidar_test = lidarTest('gpulidar1', 'CPHusky')
+    grid_map = GridMap(resolution=0.1)
+
+    # Initialize ground segmentation object with default or config file
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
+    config_path = f"{BASE_DIR}/assets/config.toml"
+    
+    if not os.path.exists(config_path):
+        print(f"Config file {config_path} not found, using default parameters")
+        groundseg = ground_seg()
+    else:
+        groundseg = ground_seg(config_path)
+
+    # Initialize visualizer
+    vis = o3d.visualization.Visualizer()
+    vis.create_window()
+
+    try:
+        while True:
+            point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
+            # print(f"Point cloud data: {point_cloud_data}")
+            if point_cloud_data is not None:
+                # Extract x, y, z, rgb, and intensity
+                points = np.array(point_cloud_data[:, :3], dtype=np.float64)
+                rgb_values = point_cloud_data[:, 3].astype(np.uint32)  # Extract RGB from float32 representation
+                intensity = point_cloud_data[:, 4]  # Intensity values
+
+                # Convert RGB values from float32 to RGB8
+                rgb = np.zeros((np.shape(points)[0], 3))
+                for index, rgb_value in enumerate(rgb_values):
+                    rgb[index, 0] = (rgb_value >> 16) & 0xFF  # Extract red channel
+                    rgb[index, 1] = (rgb_value >> 8) & 0xFF   # Extract green channel
+                    rgb[index, 2] = rgb_value & 0xFF          # Extract blue channel
+
+                points[:, 2] = -points[:, 2]  # Reverse z-axis
+                # Run ground segmentation
+                label = np.array(groundseg.run(points))
+
+                # Add to grid map where points has label 1 (ground)
+                for i, point in enumerate(points[label == 1]):
+                    x, y, z = point
+                    rgb_val = rgb[i]
+                    intensity_val = intensity[i]
+                    grid_map.add_point(x, y, z, rgb_val, intensity_val, timestamp)
+
+                # Sort points in each cell by time stamp
+                grid_map.sort_cells_by_time()
+
+                # Visualize the grid map
+                averaged_points, averaged_colors = grid_map.get_average_point_per_cell()
+
+                # Create Open3D point cloud from the grid
+                grid_point_cloud = o3d.geometry.PointCloud()
+                grid_point_cloud.points = o3d.utility.Vector3dVector(averaged_points)
+                grid_point_cloud.colors = o3d.utility.Vector3dVector(averaged_colors)
+
+                # Clear previous geometries
+                vis.clear_geometries()
+
+                # Add the new grid point cloud
+                vis.add_geometry(grid_point_cloud)
+
+                # Update visualization
+                vis.poll_events()
+                vis.update_renderer()
+
+            time.sleep(0.1)
+    finally:
+        vis.destroy_window()
