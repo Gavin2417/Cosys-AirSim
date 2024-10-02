@@ -5,7 +5,8 @@ import open3d as o3d
 import time
 from linefit import ground_seg
 import os
-
+from scipy.stats import binned_statistic_2d
+import matplotlib.pyplot as plt
 class lidarTest:
     
     def __init__(self, lidar_name, vehicle_name):
@@ -123,9 +124,11 @@ if __name__ == "__main__":
         groundseg = ground_seg(config_path)
 
     # Initialize visualizer
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name='Lidar Visualization', width=800, height=600)
-
+    # vis = o3d.visualization.Visualizer()
+    # vis.create_window(window_name='Lidar Visualization', width=800, height=600)
+    fig, ax = plt.subplots(figsize=(10, 8))
+    plt.ion()  # Enable interactive mode
+    colorbar = None
     try:
         while True:
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
@@ -188,27 +191,61 @@ if __name__ == "__main__":
                 #     grid_point_cloud = o3d.geometry.PointCloud()
                 #     grid_point_cloud.points = o3d.utility.Vector3dVector(averaged_points)
                 #     grid_point_cloud.colors = o3d.utility.Vector3dVector(averaged_colors)
-
                 # Create Open3D point cloud from the grid
                 grid_point_cloud = o3d.geometry.PointCloud()
                 grid_point_cloud.points = o3d.utility.Vector3dVector(averaged_points)
                 grid_point_cloud.colors = o3d.utility.Vector3dVector(averaged_colors)
 
-                #save the point cloud
-                o3d.io.write_point_cloud("grid_point_cloud.ply", grid_point_cloud)
 
-                voxel_size = 0.2  # Adjust as necessary
-                grid_point_cloud = grid_point_cloud.voxel_down_sample(voxel_size=voxel_size)
-                # Clear previous geometries
-                vis.clear_geometries()
+                # Convert the point cloud to a numpy array
+                points = np.asarray(grid_point_cloud.points)
 
-                # Add the new grid point cloud
-                vis.add_geometry(grid_point_cloud)
+                # Extract X, Y, Z coordinates
+                x = points[:, 0]
+                y = points[:, 1]
+                z = points[:, 2]
 
-                # Update visualization
-                vis.poll_events()
-                vis.update_renderer()
+                # Define the number of bins (grid resolution)
+                num_bins = 100
 
-            time.sleep(0.1)
+                # Compute the 2D histogram to bin the points and calculate the mean of Z for each bin
+                stat, x_edges, y_edges, bin_numbers = binned_statistic_2d(x, y, z, statistic='mean', bins=num_bins)
+
+                # Create a meshgrid for visualization
+                x_mid = (x_edges[:-1] + x_edges[1:]) / 2
+                y_mid = (y_edges[:-1] + y_edges[1:]) / 2
+                X, Y = np.meshgrid(x_mid, y_mid)
+
+                # # Plot the gridded elevation map
+                # plt.figure(figsize=(10, 8))
+                # plt.pcolormesh(X, Y, stat.T, cmap='terrain')
+                # plt.colorbar(label='Average Elevation (Z)')
+                # plt.title("Binned 2.5D Elevation Map from Point Cloud (Averaged per Grid)")
+                # plt.xlabel("X")
+                # plt.ylabel("Y")
+                # plt.show()
+
+                # Clear previous plot
+                ax.clear()
+
+                # Plot the updated data
+                pcolormesh = ax.pcolormesh(X, Y, stat.T, cmap='terrain')
+
+                # Update or create colorbar only once
+                if colorbar is None:
+                    colorbar = fig.colorbar(pcolormesh, ax=ax, label='Average Elevation (Z)')
+                else:
+                    pcolormesh.set_clim(vmin=np.nanmin(stat), vmax=np.nanmax(stat))
+                    colorbar.update_normal(pcolormesh)
+
+                ax.set_title("Binned 2.5D Elevation Map from Point Cloud (Averaged per Grid)")
+                ax.set_xlabel("X")
+                ax.set_ylabel("Y")
+
+                # Redraw the plot
+                fig.canvas.draw()
+                plt.pause(0.001)
+
     finally:
-        vis.destroy_window()
+        i =0 
+        # vis.destroy_window()
