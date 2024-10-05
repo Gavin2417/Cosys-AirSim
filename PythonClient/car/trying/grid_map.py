@@ -179,11 +179,12 @@ if __name__ == "__main__":
                 stat, x_edges, y_edges, bin_numbers = binned_statistic_2d(x, y, z, statistic='mean', bins=num_bins)
 
                 stat = np.fliplr(stat)
+                stat = np.rot90(stat)
                 
                 # Create a meshgrid for visualization
                 x_mid = (x_edges[:-1] + x_edges[1:]) / 2
                 y_mid = (y_edges[:-1] + y_edges[1:]) / 2
-                X, Y = np.meshgrid(x_mid, y_mid)
+                X, Y = np.meshgrid(y_mid, x_mid)
 
                 # Clear previous plot
                 ax.clear()
@@ -199,8 +200,8 @@ if __name__ == "__main__":
                     colorbar.update_normal(pcolormesh)
 
                 ax.set_title("Binned 2.5D Elevation Map from Point Cloud (Averaged per Grid)")
-                ax.set_xlabel("X")
-                ax.set_ylabel("Y")
+                ax.set_xlabel("Y")
+                ax.set_ylabel("X")
 
 
 
