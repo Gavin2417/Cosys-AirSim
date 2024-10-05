@@ -81,7 +81,7 @@ class GridMap:
 
         return grid_x, grid_y
 
-    def add_point(self, x, y, z, rgb, intensity, timestamp):
+    def add_point(self, x, y, z, timestamp):
         # Get grid cell for the point
         cell = self.get_grid_cell(x, y)
         
@@ -89,24 +89,22 @@ class GridMap:
             self.grid[cell] = []
         
         # Store point with rgb, intensity, and timestamp
-        self.grid[cell].append((x, y, z, rgb, intensity, timestamp))
+        self.grid[cell].append((x, y, z, timestamp))
 
     def sort_cells_by_time(self):
         # Sort points in each cell by timestamp
         for cell in self.grid:
-            self.grid[cell].sort(key=lambda p: p[5])  # Sort by timestamp (6th element)
+            self.grid[cell].sort(key=lambda p: p[3])  # Sort by timestamp (6th element)
     
     def get_average_point_per_cell(self):
         # Return the average point (x, y, z) for each cell
         averaged_points = []
-        colors = []
+
         for cell, points in self.grid.items():
             # Average x, y, z
             avg_point = np.mean([p[:3] for p in points], axis=0)
-            avg_rgb = np.mean([p[3] for p in points], axis=0)
             averaged_points.append(avg_point)
-            colors.append(avg_rgb / 255.0)  # Normalize to [0, 1] for RGB
-        return np.array(averaged_points), np.array(colors)
+        return np.array(averaged_points)
 # Main
 if __name__ == "__main__":
     # Initialize Lidar test
@@ -135,15 +133,7 @@ if __name__ == "__main__":
             if point_cloud_data is not None:
                 # Extract x, y, z, rgb, and intensity
                 points = np.array(point_cloud_data[:, :3], dtype=np.float64)
-                rgb_values = point_cloud_data[:, 3].astype(np.uint32)  # Extract RGB from float32 representation
-                intensity = point_cloud_data[:, 4]  # Intensity values
-
-                # Convert RGB values from float32 to RGB8
-                rgb = np.zeros((np.shape(points)[0], 3))
-                for index, rgb_value in enumerate(rgb_values):
-                    rgb[index, 0] = (rgb_value >> 16) & 0xFF  # Extract red channel
-                    rgb[index, 1] = (rgb_value >> 8) & 0xFF   # Extract green channel
-                    rgb[index, 2] = rgb_value & 0xFF          # Extract blue channel
+                points = points[np.linalg.norm(points, axis=1) > 0.6]
 
                 # Reverse z-axis in local coordinates
                 points[:, 2] = -points[:, 2]
@@ -154,37 +144,18 @@ if __name__ == "__main__":
                 # Transform points to world coordinates
                 points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
 
-                
-                # # Compute the center point of the point cloud
-                # center_point = np.mean(points_world, axis=0)
-
-                # # Create a point cloud for the center point with green color
-                # center_point_cloud = o3d.geometry.PointCloud()
-                # center_point_cloud.points = o3d.utility.Vector3dVector([center_point])
-
-                # # Set the color of the center point to green ([0, 1, 0] in RGB)
-                # center_point_cloud.colors = o3d.utility.Vector3dVector([[0, 1, 0]])
-
                 # Run ground segmentation
                 label = np.array(groundseg.run(points_world))
 
                 # Add to grid map where points have label 1 (ground)
                 for i, point in enumerate(points_world[label == 1]):
                     x, y, z = point
-                    rgb_val = rgb[i]
-                    intensity_val = intensity[i]
-                    grid_map.add_point(x, y, z, rgb_val, intensity_val, timestamp)
-
-                print(f"Number of cells: {len(grid_map.grid)}")
+                    grid_map.add_point(x, y, z, timestamp)
                 # Sort points in each cell by time stamp
                 grid_map.sort_cells_by_time()
 
                 # Visualize the grid map
-                averaged_points, averaged_colors = grid_map.get_average_point_per_cell()
-
-                # Check the shape of the averaged points and colors
-                print(f"Shape of averaged_points: {averaged_points.shape}")
-                print(f"Shape of averaged_colors: {averaged_colors.shape}")
+                averaged_points = grid_map.get_average_point_per_cell()
 
                 # # Ensure correct dimensionality
                 # if len(averaged_points) > 0 and averaged_points.shape[1] == 3:
@@ -194,8 +165,6 @@ if __name__ == "__main__":
                 # Create Open3D point cloud from the grid
                 grid_point_cloud = o3d.geometry.PointCloud()
                 grid_point_cloud.points = o3d.utility.Vector3dVector(averaged_points)
-                grid_point_cloud.colors = o3d.utility.Vector3dVector(averaged_colors)
-
 
                 # Convert the point cloud to a numpy array
                 points = np.asarray(grid_point_cloud.points)
@@ -215,15 +184,6 @@ if __name__ == "__main__":
                 x_mid = (x_edges[:-1] + x_edges[1:]) / 2
                 y_mid = (y_edges[:-1] + y_edges[1:]) / 2
                 X, Y = np.meshgrid(x_mid, y_mid)
-
-                # # Plot the gridded elevation map
-                # plt.figure(figsize=(10, 8))
-                # plt.pcolormesh(X, Y, stat.T, cmap='terrain')
-                # plt.colorbar(label='Average Elevation (Z)')
-                # plt.title("Binned 2.5D Elevation Map from Point Cloud (Averaged per Grid)")
-                # plt.xlabel("X")
-                # plt.ylabel("Y")
-                # plt.show()
 
                 # Clear previous plot
                 ax.clear()
