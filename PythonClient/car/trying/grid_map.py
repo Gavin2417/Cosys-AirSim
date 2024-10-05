@@ -135,7 +135,6 @@ if __name__ == "__main__":
                 points = np.array(point_cloud_data[:, :3], dtype=np.float64)
                 points = points[np.linalg.norm(points, axis=1) > 0.6]
 
-                # Reverse z-axis in local coordinates
                 points[:, 2] = -points[:, 2]
 
                 # Get the vehicle's pose in world coordinates
@@ -151,10 +150,9 @@ if __name__ == "__main__":
                 for i, point in enumerate(points_world[label == 1]):
                     x, y, z = point
                     grid_map.add_point(x, y, z, timestamp)
+
                 # Sort points in each cell by time stamp
                 grid_map.sort_cells_by_time()
-
-                # Visualize the grid map
                 averaged_points = grid_map.get_average_point_per_cell()
 
                 # # Ensure correct dimensionality
@@ -180,6 +178,8 @@ if __name__ == "__main__":
                 # Compute the 2D histogram to bin the points and calculate the mean of Z for each bin
                 stat, x_edges, y_edges, bin_numbers = binned_statistic_2d(x, y, z, statistic='mean', bins=num_bins)
 
+                stat = np.fliplr(stat)
+                
                 # Create a meshgrid for visualization
                 x_mid = (x_edges[:-1] + x_edges[1:]) / 2
                 y_mid = (y_edges[:-1] + y_edges[1:]) / 2
@@ -201,6 +201,8 @@ if __name__ == "__main__":
                 ax.set_title("Binned 2.5D Elevation Map from Point Cloud (Averaged per Grid)")
                 ax.set_xlabel("X")
                 ax.set_ylabel("Y")
+
+
 
                 # Redraw the plot
                 fig.canvas.draw()
