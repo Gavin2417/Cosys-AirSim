@@ -48,7 +48,7 @@ class lidarTest:
 
         # Convert position to a numpy array with float values
         position_array = np.array([float(position.x_val), float(position.y_val), float(position.z_val)])
-        # print(f"Position: {position_array}")
+
         # Convert quaternion orientation to a rotation matrix
         q = orientation
         rotation_matrix = self.quaternion_to_rotation_matrix(q)
@@ -57,17 +57,20 @@ class lidarTest:
 
     def quaternion_to_rotation_matrix(self, q):
         # Convert quaternion to a 3x3 rotation matrix
-        w, x, y, z = q.w_val, q.x_val, q.y_val, q.z_val
-        rot_matrix = np.array([[1 - 2*y**2 - 2*z**2, 2*x*y - 2*z*w, 2*x*z + 2*y*w],
-                               [2*x*y + 2*z*w, 1 - 2*x**2 - 2*z**2, 2*y*z - 2*x*w],
-                               [2*x*z - 2*y*w, 2*y*z + 2*x*w, 1 - 2*x**2 - 2*y**2]])
-        return rot_matrix
+        qw, qx, qy, qz = q.w_val, q.x_val, q.y_val, q.z_val
 
+        # Create a 4x4 transformation matrix from the quaternion
+        rotation_matrix = np.array([
+            [1.0 - 2.0*qy*qy - 2.0*qz*qz, 2.0*qx*qy - 2.0*qz*qw, 2.0*qx*qz + 2.0*qy*qw],
+            [2.0*qx*qy + 2.0*qz*qw, 1.0 - 2.0*qx*qx - 2.0*qz*qz, 2.0*qy*qz - 2.0*qx*qw],
+            [2.0*qx*qz - 2.0*qy*qw, 2.0*qy*qz + 2.0*qx*qw, 1.0 - 2.0*qx*qx - 2.0*qy*qy],
+        ])
+        return rotation_matrix
     def transform_to_world(self, points, position, rotation_matrix):
-        # Apply rotation and translation to transform points to the world coordinate frame
-        points_in_world = np.dot(points, rotation_matrix.T) + position
+        # Apply rotation first, then apply translation (position)
+        points_rotated = np.dot(points, rotation_matrix.T)  # Rotate points
+        points_in_world = points_rotated + position  # Translate points to world coordinates
         return points_in_world
-
 class GridMap:
     def __init__(self, resolution):
         self.resolution = resolution
@@ -124,29 +127,28 @@ if __name__ == "__main__":
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
     vis.create_window(window_name='Lidar Visualization', width=800, height=600)
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+
     plt.ion()  # Enable interactive mode
     colorbar = None
     try:
         while True:
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
             if point_cloud_data is not None:
-                # Extract x, y, z, rgb, and intensity
+                # Extract x, y, z coordinates from point cloud
                 points = np.array(point_cloud_data[:, :3], dtype=np.float64)
                 points = points[np.linalg.norm(points, axis=1) > 0.6]
-
-                points[:, 2] = -points[:, 2]
+                
 
                 # Get the vehicle's pose in world coordinates
                 position, rotation_matrix = lidar_test.get_vehicle_pose()
 
                 # Transform points to world coordinates
                 points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
-
-                # Run ground segmentation
+                points_world[:, 2] = -points_world[:, 2]  # Flip Z-axis if needed
                 label = np.array(groundseg.run(points_world))
 
-                
                 # Create point cloud for all points
                 point_cloud = o3d.geometry.PointCloud()
                 point_cloud.points = o3d.utility.Vector3dVector(points_world)
@@ -168,5 +170,6 @@ if __name__ == "__main__":
                 vis.update_renderer()
 
     finally:
-        i =0 
-        # vis.destroy_window()
+        i = 0
+        # plt.ioff()  # Disable interactive mode
+        # plt.show()
