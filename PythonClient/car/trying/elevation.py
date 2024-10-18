@@ -57,45 +57,44 @@ class lidarTest:
 
     def quaternion_to_rotation_matrix(self, q):
         # Convert quaternion to a 3x3 rotation matrix
-        q0, q1, q2, q3 = q.w_val, q.x_val, -q.y_val, q.z_val
-        # First row of the rotation matrix
-        r00 = 2 * (q0 * q0 + q1 * q1) - 1
-        r01 = 2 * (q1 * q2 - q0 * q3)
-        r02 = 2 * (q1 * q3 + q0 * q2)
-        
-        # Second row of the rotation matrix
-        r10 = 2 * (q1 * q2 + q0 * q3)
-        r11 = 2 * (q0 * q0 + q2 * q2) - 1
-        r12 = 2 * (q2 * q3 - q0 * q1)
-        
-        # Third row of the rotation matrix
-        r20 = 2 * (q1 * q3 - q0 * q2)
-        r21 = 2 * (q2 * q3 + q0 * q1)
-        r22 = 2 * (q0 * q0 + q3 * q3) - 1
-        
-        # 3x3 rotation matrix
-        rot_matrix = np.array([[r00, r01, r02],
-                            [r10, r11, r12],
-                            [r20, r21, r22]])
-                                
+        w, x, y, z = q.w_val, q.x_val, q.y_val, q.z_val
+        rot_matrix = np.array([[1 - 2*y**2 - 2*z**2, 2*x*y - 2*z*w, 2*x*z + 2*y*w],
+                               [2*x*y + 2*z*w, 1 - 2*x**2 - 2*z**2, 2*y*z - 2*x*w],
+                               [2*x*z - 2*y*w, 2*y*z + 2*x*w, 1 - 2*x**2 - 2*y**2]])
         return rot_matrix
 
     def transform_to_world(self, points, position, rotation_matrix):
         # Apply rotation and translation to transform points to the world coordinate frame
-        points_in_world = np.dot(points+position, rotation_matrix.T) 
+        points_in_world = np.dot(points, rotation_matrix.T) + position
         return points_in_world
+class KalmanFilter:
+    def __init__(self, process_noise=1e-4, measurement_noise=0.1, initial_estimate=0, initial_uncertainty=1):
+        self.z = initial_estimate  # Estimated height
+        self.P = initial_uncertainty  # Estimated uncertainty
+        self.Q = process_noise  # Process noise
+        self.R = measurement_noise  # Measurement noise
 
+    def predict(self):
+        # In a simple case, we do not have a control input, so the prediction is just the prior estimate.
+        self.P += self.Q  # Increase uncertainty with the process noise (prediction step)
+
+    def update(self, z_measure):
+        # Kalman gain
+        K = self.P / (self.P + self.R)
+        
+        # Update the estimate with measurement
+        self.z = self.z + K * (z_measure - self.z)
+        
+        # Update the uncertainty
+        self.P = (1 - K) * self.P
 class GridMap:
     def __init__(self, resolution):
         self.resolution = resolution
         self.grid = {}
 
     def get_grid_cell(self, x, y):
-        # Convert x, y coordinates to grid cell indices
-         
-        grid_x = round(int(x / self.resolution),1)
-        grid_y = round(int(y / self.resolution),1)
-
+        grid_x = round(int(x / self.resolution), 1)
+        grid_y = round(int(y / self.resolution), 1)
         return grid_x, grid_y
 
     def add_point(self, x, y, z, timestamp):
@@ -103,25 +102,35 @@ class GridMap:
         cell = self.get_grid_cell(x, y)
         
         if cell not in self.grid:
-            self.grid[cell] = []
+            # Initialize a Kalman filter for each new grid cell
+            self.grid[cell] = KalmanFilter(initial_estimate=z)
+
+        # Get the Kalman filter for this cell
+        kf = self.grid[cell]
+
+        # Kalman Filter Prediction Step
+        kf.predict()
+
+        # Kalman Filter Update Step with the new measurement (z)
+        kf.update(z)
+
+        # Store the updated Kalman filter in the grid
+        self.grid[cell] = kf
+
+    def get_height_estimate_and_uncertainty(self):
+        # Return the estimated height and uncertainty for each cell
+        estimated_points = []
+        uncertainties = []
         
-        # Store point with rgb, intensity, and timestamp
-        self.grid[cell].append((x, y, z, timestamp))
+        for cell, kf in self.grid.items():
+            # Get the grid cell center position from the cell index
+            x, y = cell
+            # Store the estimated height and uncertainty
+            estimated_points.append([x * self.resolution, y * self.resolution, kf.z])
+            uncertainties.append(kf.P)  # Uncertainty for visualization
 
-    def sort_cells_by_time(self):
-        # Sort points in each cell by timestamp
-        for cell in self.grid:
-            self.grid[cell].sort(key=lambda p: p[3])  # Sort by timestamp (6th element)
-    
-    def get_average_point_per_cell(self):
-        # Return the average point (x, y, z) for each cell
-        averaged_points = []
+        return np.array(estimated_points), np.array(uncertainties)
 
-        for cell, points in self.grid.items():
-            # Average x, y, z
-            avg_point = np.mean([p[:3] for p in points], axis=0)
-            averaged_points.append(avg_point)
-        return np.array(averaged_points)
 # Main
 if __name__ == "__main__":
     # Initialize Lidar test
@@ -145,13 +154,13 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(10, 8))
     plt.ion()  # Enable interactive mode
     colorbar = None
+
     try:
         while True:
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
             if point_cloud_data is not None:
                 points = np.array(point_cloud_data[:, :3], dtype=np.float64)
                 points = points[np.linalg.norm(points, axis=1) > 0.6]  # Filter points
-
                 points[:, 2] = -points[:, 2]  # Reverse Z-axis if necessary
 
                 # Get the vehicle's pose in world coordinates
@@ -163,62 +172,46 @@ if __name__ == "__main__":
                 # Run ground segmentation (label == 1 for ground, label == 0 for obstacles)
                 label = np.array(groundseg.run(points_world))
 
-                # Add to grid map (ground and obstacles separately)
+                # Add points to the grid map and update with Kalman filter
                 for i, point in enumerate(points_world[label == 1]):  # Ground points
                     x, y, z = point
                     grid_map.add_point(x, y, z, timestamp)
-                
-                for i, point in enumerate(points_world[label == 0]):  # Obstacle points
-                    x, y, z = point
-                    obstacle.add_point(x, y, z, timestamp)
 
-                # Sort and average points per grid cell
-                grid_map.sort_cells_by_time()
-                averaged_points = grid_map.get_average_point_per_cell()
+                # Get the estimated height and uncertainties from the Kalman filter
+                estimated_points, uncertainties = grid_map.get_height_estimate_and_uncertainty()
 
-                obstacle.sort_cells_by_time()
-                averaged_obstacle = obstacle.get_average_point_per_cell()
-
-                grid_point_cloud = o3d.geometry.PointCloud()
-                grid_point_cloud.points = o3d.utility.Vector3dVector(averaged_points)
-                # grid_point_cloud.colors = o3d.utility.Vector3dVector(averaged_colors)
-
-                #save the point cloud
-                o3d.io.write_point_cloud("grid_point_cloud.ply", grid_point_cloud)
-
-
-                # Convert grid map to numpy arrays
-                points = np.asarray(averaged_points)
-                obstacle_points = np.asarray(averaged_obstacle)
-
-                # Extract X, Y, Z coordinates
-                x = points[:, 0]
-                y = points[:, 1]
-                z = points[:, 2]
-
-                x_obstacle = obstacle_points[:, 0]
-                y_obstacle = obstacle_points[:, 1]
-                z_obstacle = obstacle_points[:, 2]
+                # Convert grid map to numpy arrays for plotting
+                x = estimated_points[:, 0]
+                y = estimated_points[:, 1]
+                z = -estimated_points[:, 2]
 
                 # Define the number of bins (grid resolution)
                 num_bins = 200
 
-                # Compute bin edges based on the combined ground and obstacle points
-                combined_x = np.concatenate((x, x_obstacle))
-                combined_y = np.concatenate((y, y_obstacle))
+                # Compute bin edges based on X and Y data
+                x_edges = np.linspace(x.min(), x.max(), num_bins + 1)
+                y_edges = np.linspace(y.min(), y.max(), num_bins + 1)
 
-                # Compute the bin edges once using the combined X and Y data
-                x_edges = np.linspace(-10, 12, num_bins + 1)
-                y_edges = np.linspace(-10, 10, num_bins + 1)
-
-                # Compute the 2D histograms for ground and obstacle points using the same bin edges
+                # Compute the 2D histograms for ground points using the same bin edges
                 stat, _, _, _ = binned_statistic_2d(x, y, z, statistic='mean', bins=[x_edges, y_edges])
-                stat_obstacle, _, _, _ = binned_statistic_2d(x_obstacle, y_obstacle, z_obstacle, statistic='mean', bins=[x_edges, y_edges])
 
                 # Create a meshgrid for visualization
                 x_mid = (x_edges[:-1] + x_edges[1:]) / 2
                 y_mid = (y_edges[:-1] + y_edges[1:]) / 2
-                X, Y = np.meshgrid(x_mid, y_mid)
+                X, Y = np.meshgrid(y_mid, x_mid)
+
+                # Initialize an empty uncertainty grid with NaN values
+                uncertainty_grid = np.full(X.shape, np.nan)
+
+                # Populate the uncertainty grid with available uncertainties
+                for i in range(len(estimated_points)):
+                    cell_x, cell_y = grid_map.get_grid_cell(x[i], y[i])
+                    # Find the bin indices corresponding to the cell_x and cell_y
+                    bin_x = np.digitize(x[i], x_edges) - 1  # Get the bin index in the x direction
+                    bin_y = np.digitize(y[i], y_edges) - 1  # Get the bin index in the y direction
+                    
+                    if 0 <= bin_x < X.shape[1] and 0 <= bin_y < X.shape[0]:  # Ensure bin index is valid
+                        uncertainty_grid[bin_x, bin_x] = uncertainties[i]
 
                 # Clear previous plot
                 ax.clear()
@@ -226,8 +219,8 @@ if __name__ == "__main__":
                 # Plot the ground points data
                 pcolormesh = ax.pcolormesh(X, Y, stat.T, cmap='terrain')
 
-                # Overlay obstacle cells in red
-                pcolormesh_obstacle = ax.pcolormesh(X, Y, stat_obstacle.T, cmap='Reds', alpha=0.6)
+                # Add uncertainty overlay (optional, for visualization of uncertainties)
+                # uncertainty_map = ax.pcolormesh(X, Y, uncertainty_grid.T, cmap='coolwarm', alpha=0.5)
 
                 # Update or create colorbar only once
                 if colorbar is None:
@@ -236,7 +229,7 @@ if __name__ == "__main__":
                     pcolormesh.set_clim(vmin=np.nanmin(stat), vmax=np.nanmax(stat))
                     colorbar.update_normal(pcolormesh)
 
-                ax.set_title("Binned 2.5D Elevation Map with Obstacles (Red)")
+                ax.set_title("Binned 2.5D Elevation Map with Kalman Filter")
                 ax.set_xlabel("Y")
                 ax.set_ylabel("X")
 
@@ -246,5 +239,3 @@ if __name__ == "__main__":
 
     finally:
         print("Visualization ended.")
-
-        # cubic tranorm

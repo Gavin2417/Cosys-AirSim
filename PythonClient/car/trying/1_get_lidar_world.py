@@ -48,7 +48,7 @@ class lidarTest:
 
         # Convert position to a numpy array with float values
         position_array = np.array([float(position.x_val), float(position.y_val), float(position.z_val)])
-        # print(f"Position: {position_array}")
+
         # Convert quaternion orientation to a rotation matrix
         q = orientation
         rotation_matrix = self.quaternion_to_rotation_matrix(q)
@@ -57,34 +57,20 @@ class lidarTest:
 
     def quaternion_to_rotation_matrix(self, q):
         # Convert quaternion to a 3x3 rotation matrix
-        q0, q1, q2, q3 = q.w_val, q.x_val, -q.y_val, q.z_val
-        # First row of the rotation matrix
-        r00 = 2 * (q0 * q0 + q1 * q1) - 1
-        r01 = 2 * (q1 * q2 - q0 * q3)
-        r02 = 2 * (q1 * q3 + q0 * q2)
-        
-        # Second row of the rotation matrix
-        r10 = 2 * (q1 * q2 + q0 * q3)
-        r11 = 2 * (q0 * q0 + q2 * q2) - 1
-        r12 = 2 * (q2 * q3 - q0 * q1)
-        
-        # Third row of the rotation matrix
-        r20 = 2 * (q1 * q3 - q0 * q2)
-        r21 = 2 * (q2 * q3 + q0 * q1)
-        r22 = 2 * (q0 * q0 + q3 * q3) - 1
-        
-        # 3x3 rotation matrix
-        rot_matrix = np.array([[r00, r01, r02],
-                            [r10, r11, r12],
-                            [r20, r21, r22]])
-                                
-        return rot_matrix
+        qw, qx, qy, qz = q.w_val, q.x_val, q.y_val, q.z_val
 
+        # Create a 4x4 transformation matrix from the quaternion
+        rotation_matrix = np.array([
+            [1.0 - 2.0*qy*qy - 2.0*qz*qz, 2.0*qx*qy - 2.0*qz*qw, 2.0*qx*qz + 2.0*qy*qw],
+            [2.0*qx*qy + 2.0*qz*qw, 1.0 - 2.0*qx*qx - 2.0*qz*qz, 2.0*qy*qz - 2.0*qx*qw],
+            [2.0*qx*qz - 2.0*qy*qw, 2.0*qy*qz + 2.0*qx*qw, 1.0 - 2.0*qx*qx - 2.0*qy*qy],
+        ])
+        return rotation_matrix
     def transform_to_world(self, points, position, rotation_matrix):
-        # Apply rotation and translation to transform points to the world coordinate frame
-        points_in_world = np.dot(points+position, rotation_matrix.T) 
+        # Apply rotation first, then apply translation (position)
+        points_rotated = np.dot(points, rotation_matrix.T)  # Rotate points
+        points_in_world = points_rotated + position  # Translate points to world coordinates
         return points_in_world
-
 class GridMap:
     def __init__(self, resolution):
         self.resolution = resolution
@@ -127,7 +113,6 @@ if __name__ == "__main__":
     # Initialize Lidar test
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     grid_map = GridMap(resolution=0.01)
-    obstacle = GridMap(resolution=0.01)
 
     # Initialize ground segmentation object with default or config file
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
@@ -142,109 +127,52 @@ if __name__ == "__main__":
     # Initialize visualizer
     # vis = o3d.visualization.Visualizer()
     # vis.create_window(window_name='Lidar Visualization', width=800, height=600)
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+
     plt.ion()  # Enable interactive mode
     colorbar = None
     try:
         while True:
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
             if point_cloud_data is not None:
+                # Extract x, y, z coordinates from point cloud
                 points = np.array(point_cloud_data[:, :3], dtype=np.float64)
-                points = points[np.linalg.norm(points, axis=1) > 0.6]  # Filter points
-
-                points[:, 2] = -points[:, 2]  # Reverse Z-axis if necessary
+                points = points[np.linalg.norm(points, axis=1) > 0.6]
+                points[:, 2] = points[:, 2]  # Flip Z-axis if needed
 
                 # Get the vehicle's pose in world coordinates
                 position, rotation_matrix = lidar_test.get_vehicle_pose()
 
                 # Transform points to world coordinates
                 points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
+                    
+                # Extract x, y, z coordinates for plotting
+                x = points_world[:, 0]
+                y = points_world[:, 1]
+                z = -points_world[:, 2]
 
-                # Run ground segmentation (label == 1 for ground, label == 0 for obstacles)
-                label = np.array(groundseg.run(points_world))
-
-                # Add to grid map (ground and obstacles separately)
-                for i, point in enumerate(points_world[label == 1]):  # Ground points
-                    x, y, z = point
-                    grid_map.add_point(x, y, z, timestamp)
-                
-                for i, point in enumerate(points_world[label == 0]):  # Obstacle points
-                    x, y, z = point
-                    obstacle.add_point(x, y, z, timestamp)
-
-                # Sort and average points per grid cell
-                grid_map.sort_cells_by_time()
-                averaged_points = grid_map.get_average_point_per_cell()
-
-                obstacle.sort_cells_by_time()
-                averaged_obstacle = obstacle.get_average_point_per_cell()
-
-                grid_point_cloud = o3d.geometry.PointCloud()
-                grid_point_cloud.points = o3d.utility.Vector3dVector(averaged_points)
-                # grid_point_cloud.colors = o3d.utility.Vector3dVector(averaged_colors)
-
-                #save the point cloud
-                o3d.io.write_point_cloud("grid_point_cloud.ply", grid_point_cloud)
-
-
-                # Convert grid map to numpy arrays
-                points = np.asarray(averaged_points)
-                obstacle_points = np.asarray(averaged_obstacle)
-
-                # Extract X, Y, Z coordinates
-                x = points[:, 0]
-                y = points[:, 1]
-                z = points[:, 2]
-
-                x_obstacle = obstacle_points[:, 0]
-                y_obstacle = obstacle_points[:, 1]
-                z_obstacle = obstacle_points[:, 2]
-
-                # Define the number of bins (grid resolution)
-                num_bins = 200
-
-                # Compute bin edges based on the combined ground and obstacle points
-                combined_x = np.concatenate((x, x_obstacle))
-                combined_y = np.concatenate((y, y_obstacle))
-
-                # Compute the bin edges once using the combined X and Y data
-                x_edges = np.linspace(-10, 12, num_bins + 1)
-                y_edges = np.linspace(-10, 10, num_bins + 1)
-
-                # Compute the 2D histograms for ground and obstacle points using the same bin edges
-                stat, _, _, _ = binned_statistic_2d(x, y, z, statistic='mean', bins=[x_edges, y_edges])
-                stat_obstacle, _, _, _ = binned_statistic_2d(x_obstacle, y_obstacle, z_obstacle, statistic='mean', bins=[x_edges, y_edges])
-
-                # Create a meshgrid for visualization
-                x_mid = (x_edges[:-1] + x_edges[1:]) / 2
-                y_mid = (y_edges[:-1] + y_edges[1:]) / 2
-                X, Y = np.meshgrid(x_mid, y_mid)
-
-                # Clear previous plot
+                # # Clear the previous plot
                 ax.clear()
 
-                # Plot the ground points data
-                pcolormesh = ax.pcolormesh(X, Y, stat.T, cmap='terrain')
+                # Create a 3D scatter plot with height (Z) as color
+                scatter = ax.scatter(x, y, z, c=z, cmap='viridis')
 
-                # Overlay obstacle cells in red
-                pcolormesh_obstacle = ax.pcolormesh(X, Y, stat_obstacle.T, cmap='Reds', alpha=0.6)
-
-                # Update or create colorbar only once
+                # Add colorbar to represent height (z-values)
                 if colorbar is None:
-                    colorbar = fig.colorbar(pcolormesh, ax=ax, label='Average Elevation (Z)')
+                    colorbar = fig.colorbar(scatter, ax=ax, shrink=0.5)
                 else:
-                    pcolormesh.set_clim(vmin=np.nanmin(stat), vmax=np.nanmax(stat))
-                    colorbar.update_normal(pcolormesh)
+                    colorbar.update_normal(scatter)
 
-                ax.set_title("Binned 2.5D Elevation Map with Obstacles (Red)")
-                ax.set_xlabel("Y")
-                ax.set_ylabel("X")
+                # # Set labels and title
+                # ax.set_xlabel('X')
+                # ax.set_ylabel('Y')
+                # ax.set_zlabel('Z (Height)')
+                ax.set_title('3D Lidar Point Cloud Visualization')
 
-                # Redraw the plot
-                fig.canvas.draw()
-                plt.pause(0.001)
-
+                # Update the plot
+                plt.draw()
+                plt.pause(0.01)  # Pause to update plot
     finally:
-        print("Visualization ended.")
-
-        # cubic tranorm
+        plt.ioff()  # Disable interactive mode
+        plt.show()
