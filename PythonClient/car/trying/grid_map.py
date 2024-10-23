@@ -146,7 +146,6 @@ if __name__ == "__main__":
                 # Run ground segmentation
                 label = np.array(groundseg.run(points_world))
 
-                
                 # Create point cloud for all points
                 point_cloud = o3d.geometry.PointCloud()
                 point_cloud.points = o3d.utility.Vector3dVector(points_world)
