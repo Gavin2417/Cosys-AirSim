@@ -16,7 +16,7 @@ y_vals = points[:, 1]
 z_vals = points[:, 2]
 
 # Define the grid resolution (must match the resolution you used to create the grid)
-grid_resolution = 0.05  # This should be the same as the resolution you used
+grid_resolution = 0.1  # This should be the same as the resolution you used
 
 # Create grid edges for X and Y based on the range of your X and Y values
 x_edges = np.arange(min(x_vals), max(x_vals) + grid_resolution, grid_resolution)
@@ -48,6 +48,6 @@ fig.colorbar(c, ax=ax, label='Average Z Value (Height)')
 # Set axis labels and title
 ax.set_xlabel('X')
 ax.set_ylabel('Y')
-ax.set_title('2D Grid Cell Plot from PLY File')
+ax.set_title('2D elevation map')
 
 plt.show()

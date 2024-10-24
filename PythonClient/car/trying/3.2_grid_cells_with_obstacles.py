@@ -156,6 +156,15 @@ if __name__ == "__main__":
                 # Get the average height estimates for ground and obstacles
                 ground_points = grid_map_ground.get_height_estimate()
                 obstacle_points = grid_map_obstacle.get_height_estimate()
+                # save the ground points 
+                ground_point_cloud = o3d.geometry.PointCloud()
+                ground_point_cloud.points = o3d.utility.Vector3dVector(ground_points)
+                o3d.io.write_point_cloud('ground_point_cloud.ply', ground_point_cloud)
+                # save the obstacle points
+                obstacle_point_cloud = o3d.geometry.PointCloud()
+                obstacle_point_cloud.points = o3d.utility.Vector3dVector(obstacle_points)
+                o3d.io.write_point_cloud('obstacle_point_cloud.ply', obstacle_point_cloud)
+
 
                 # Extract X, Y, Z for ground points
                 x_vals_ground = ground_points[:, 0]
