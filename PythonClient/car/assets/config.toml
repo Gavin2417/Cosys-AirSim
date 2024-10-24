@@ -13,7 +13,7 @@ n_bins = 1000         # number of radial bins.
 [ground]
 # 直线的slope 斜率，比如一个seg里拟合的线斜率 认为是地面的范围
 min_slope = -0.1      # minimum slope of a ground line.
-max_slope =  0.2   # maximum slope of a ground line. # 对应T_m
+max_slope =  1   # maximum slope of a ground line. # 对应T_m
 max_fit_error = 0.01  # maximum error of a point during line fit. # 对应 T_RMSE, will sqaure inside code.
 
 # 同样也是最终判断是否是地面点的决定性参数！

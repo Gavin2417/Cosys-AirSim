@@ -2,6 +2,7 @@ import open3d as o3d
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.neighbors import NearestNeighbors
+from matplotlib.colors import LinearSegmentedColormap
 
 # Load the PLY point cloud file
 point_cloud = o3d.io.read_point_cloud('grid_point_cloud.ply')
@@ -87,12 +88,16 @@ for i in range(len(x_vals)):
     if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
         Z_slope_risk[x_idx, y_idx] = slope_risk[i]
 
+# Create a custom colormap from gray to yellow to red
+colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]  # Gray → Yellow → Red
+cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
+
 # Plot the grid using pcolormesh with slope risk
 fig, ax = plt.subplots()
-c = ax.pcolormesh(X, Y, Z_slope_risk.T, shading='auto', cmap='viridis')
+c = ax.pcolormesh(X, Y, Z_slope_risk.T, shading='auto', cmap=cmap, vmin=0, vmax=1)  # Set color range from 0 to 1
 
 # Add a color bar to indicate the slope risk values
-fig.colorbar(c, ax=ax, label='Slope Risk (0-1)')
+fig.colorbar(c, ax=ax, label='Slope Risk (0-1)', ticks=[0, 0.25, 0.5, 0.75, 1])
 
 # Set axis labels and title
 ax.set_xlabel('X')
