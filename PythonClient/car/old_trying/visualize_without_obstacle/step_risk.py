@@ -17,7 +17,7 @@ z_vals = points[:, 2]
 # Recreate the points array to be Nx3
 points_xyz = np.vstack((x_vals, y_vals, z_vals)).T
 
-def calculate_step_risk(points, grid_resolution=0.1, max_height_diff=0.5, ground_threshold=-0.55):
+def calculate_step_risk(points, grid_resolution=0.1, max_height_diff=0.5):
     """
     Calculate step risk based on height difference between adjacent cells in the grid map.
     Also considers points that are significantly lower than a baseline ground level.
@@ -65,32 +65,29 @@ def calculate_step_risk(points, grid_resolution=0.1, max_height_diff=0.5, ground
 
             # Get neighboring heights (north, south, west, east)
             neighbors = [
-                Z_grid[x-1, y], Z_grid[x+1, y], Z_grid[x, y-1], Z_grid[x, y+1]
+                Z_grid[x-1, y-1], Z_grid[x-1, y], Z_grid[x-1, y+1],
+                Z_grid[x, y-1], Z_grid[x, y], Z_grid[x, y+1],
+                Z_grid[x+1, y-1], Z_grid[x+1, y], Z_grid[x+1, y+1]
             ]
             neighbors = [z for z in neighbors if not np.isnan(z)]  # Ignore NaNs
 
             if neighbors:
                 # Calculate the height difference with the neighbors
                 max_diff = np.max(np.abs(np.array(neighbors) - z_center))
+                # max_diff = np.mean(np.abs(np.array(neighbors) - z_center))
 
                 # Normalize the risk based on the max height difference
                 step_risk = min(max_diff / max_height_diff, 1.0)  # Scale to 0-1
             else:
                 step_risk = 0  # If no neighbors, assume no risk
 
-            # Additional risk: Check if the height is significantly below the ground threshold
-            if z_center > ground_threshold:
-                # Height difference with the baseline ground
-                ground_risk = min(np.abs(z_center - ground_threshold) / max_height_diff, 1.0)
-                # Combine the step risk and the ground risk
-                step_risk = max(step_risk, ground_risk)
                 
             step_risk_grid[x, y] = step_risk
 
     return step_risk_grid, X, Y
 
 # Calculate step risk
-step_risk_grid, X, Y = calculate_step_risk(points_xyz, grid_resolution=0.1, max_height_diff=0.5, ground_threshold=-0.55)
+step_risk_grid, X, Y = calculate_step_risk(points_xyz, grid_resolution=0.1, max_height_diff=0.12)
 
 # Create a custom colormap from gray to yellow to red
 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]  # Gray → Yellow → Red

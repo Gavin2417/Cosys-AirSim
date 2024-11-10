@@ -167,13 +167,6 @@ def calculate_step_risk(points, grid_resolution=0.1, max_height_diff=0.5, ground
                 step_risk = min(max_diff / max_height_diff, 1.0)  # Scale to 0-1
             else:
                 step_risk = 0  # If no neighbors, assume no risk
-
-            # Additional risk: Check if the height is significantly below the ground threshold
-            if z_center > ground_threshold:
-                # Height difference with the baseline ground
-                ground_risk = min(np.abs(z_center - ground_threshold) / max_height_diff, 1.0)
-                # Combine the step risk and the ground risk
-                step_risk = max(step_risk, ground_risk)
                 
             step_risk_grid[x, y] = step_risk
 
@@ -206,11 +199,13 @@ for i in range(len(ground_x_vals)):
         Z_slope_risk[x_idx, y_idx] = slope_risk[i]
 
 # Calculate step risk
-step_risk_grid, X, Y = calculate_step_risk(points_xyz, grid_resolution=0.1, max_height_diff=0.5, ground_threshold=-0.55)
+step_risk_grid, X, Y = calculate_step_risk(points_xyz, grid_resolution=0.1, max_height_diff=0.11, ground_threshold=-0.55)
 
-# Combine slope risk, step risk, and obstacle grid
-# Compute the average risk (excluding NaN values)
-combined_risk_grid = np.nanmean(np.array([Z_slope_risk, step_risk_grid, obstacle_grid]), axis=0)
+# Combine slope risk, step risk, and obstacle grid with weights
+slope_weight = 0.2
+step_weight = 0.4
+obstacle_weight = 0.4
+combined_risk_grid = (slope_weight * Z_slope_risk + step_weight * step_risk_grid + obstacle_weight * masked_obstacle_grid)
 
 # Apply CVaR locally on each grid cell
 def compute_cvar_cellwise(risk_grid, alpha=0.75):
