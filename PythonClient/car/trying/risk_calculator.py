@@ -51,6 +51,7 @@ def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.5, max_s
 
         # Calculate slopes with filtered neighbors for slope risk
         for dx, dy in filtered_slope_offsets:
+            
             nx, ny = x + dx, y + dy
             if 0 <= nx < Z_grid.shape[0] and 0 <= ny < Z_grid.shape[1]:
                 z_neighbor = Z_grid[nx, ny]
@@ -79,7 +80,6 @@ def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.5, max_s
 
     return step_risk_grid, slope_risk_grid
 
-
 # Load the PLY point cloud files
 ground_point_cloud = o3d.io.read_point_cloud('ground_point_cloud.ply')
 obstacle_point_cloud = o3d.io.read_point_cloud('obstacle_point_cloud.ply')
@@ -89,16 +89,20 @@ ground_points = np.asarray(ground_point_cloud.points)
 obstacle_points = np.asarray(obstacle_point_cloud.points)
 
 # Extract X, Y, Z for ground points
-x_vals_ground = ground_points[:, 0]
-y_vals_ground = ground_points[:, 1]
-z_vals_ground = ground_points[:, 2]
+ground_x_vals = ground_points[:, 0]
+ground_y_vals = ground_points[:, 1]
+ground_z_vals = ground_points[:, 2]
+
+obstacle_x_vals = obstacle_points[:, 0]
+obstacle_y_vals = obstacle_points[:, 1]
+obstacle_z_vals = obstacle_points[:, 2]
 
 # Define the grid resolution
-grid_resolution = 0.10
+grid_resolution = 0.1
 
 # Create grid edges for X and Y based on the range of ground points
-x_edges = np.arange(min(x_vals_ground), max(x_vals_ground) + grid_resolution, grid_resolution)
-y_edges = np.arange(min(y_vals_ground), max(y_vals_ground) + grid_resolution, grid_resolution)
+x_edges = np.arange(min(ground_x_vals), max(ground_x_vals) + grid_resolution, grid_resolution)
+y_edges = np.arange(min(ground_y_vals), max(ground_y_vals) + grid_resolution, grid_resolution)
 
 # Create meshgrid for X and Y (for ground)
 x_mid = (x_edges[:-1] + x_edges[1:]) / 2  # Midpoints of X bins
@@ -109,21 +113,30 @@ X, Y = np.meshgrid(x_mid, y_mid)
 Z_ground = np.full((len(x_mid), len(y_mid)), np.nan)
 
 # Fill the Z grid for ground points
-for i in range(len(x_vals_ground)):
-    x_idx = np.digitize(x_vals_ground[i], x_edges) - 1
-    y_idx = np.digitize(y_vals_ground[i], y_edges) - 1
+for i in range(len(ground_x_vals)):
+    x_idx = np.digitize(ground_x_vals[i], x_edges) - 1
+    y_idx = np.digitize(ground_y_vals[i], y_edges) - 1
     if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-        Z_ground[x_idx, y_idx] = z_vals_ground[i]
+        Z_ground[x_idx, y_idx] = ground_z_vals[i]
 
 # Get the list of non-NaN indices in Z_ground
 non_nan_indices = np.argwhere(~np.isnan(Z_ground))
 
-
 # Calculate the combined step and slope risk grids
-step_risk_grid, slope_risk_grid = calculate_combined_risks(Z_ground, non_nan_indices, max_height_diff=0.10, max_slope_degrees=30.0, radius=0.5)
+step_risk_grid, slope_risk_grid = calculate_combined_risks(Z_ground, non_nan_indices, max_height_diff=0.05, max_slope_degrees=30.0, radius=0.5)
 
-# # Merge the two risk grids to get the total risk grid
+# Merge step and slope risk grids to get the total risk grid
 total_risk_grid = np.nanmean([step_risk_grid, slope_risk_grid], axis=0)
+
+# Add obstacle points to the risk grid
+for i in range(len(obstacle_x_vals)):
+    x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
+    y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
+    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
+        total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
+
+# Mask NaN values in total_risk_grid for transparency
+masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
 
 # Create a custom colormap from gray to yellow to red
 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]  # Gray → Yellow → Red
@@ -131,12 +144,12 @@ cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
 
 # Plot the total risk grid
 fig, ax = plt.subplots()
-c = ax.pcolormesh(X, Y, total_risk_grid.T, shading='auto', cmap=cmap, vmin=0, vmax=1)
-fig.colorbar(c, ax=ax, label='Total Risk (0-1)', ticks=[0, 0.25, 0.5, 0.75, 1])
+c = ax.pcolormesh(X, Y, masked_total_risk_grid.T, shading='auto', cmap=cmap, vmin=0, vmax=1)
+fig.colorbar(c, ax=ax, label='Risk Value (0=Ground, 1=Obstacle)')
 
 # Set axis labels and title
 ax.set_xlabel('X')
 ax.set_ylabel('Y')
-ax.set_title('Total Risk Grid')
+ax.set_title('Total Risk Grid with Ground and Obstacle Data')
 
 plt.show()
