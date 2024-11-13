@@ -8,8 +8,9 @@ import os
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from scipy.stats import binned_statistic_2d
-from risk_calculator import calculate_slope_risk, calculate_step_risk, combine_risks, compute_cvar_cellwise, plot_cvar_grid
+from function_risk import calculate_combined_risks,compute_cvar_cellwise
 from matplotlib.colors import LinearSegmentedColormap
+import numpy.ma as ma  
 class lidarTest:
     
     def __init__(self, lidar_name, vehicle_name):
@@ -141,7 +142,6 @@ if __name__ == "__main__":
                 points_world[:, 2] = -points_world[:, 2]  # Flip Z-axis if needed
                 label = np.array(groundseg.run(points_world))
 
-                # Classify ground and obstacle points
                 for i, point in enumerate(points_world):
                     x, y, z = point
                     if label[i] == 1:
@@ -152,51 +152,88 @@ if __name__ == "__main__":
                 ground_points = grid_map_ground.get_height_estimate()
                 obstacle_points = grid_map_obstacle.get_height_estimate()
 
-                # Calculate risks
-                # Calculate step risk and retrieve X, Y grids
-                step_risk_grid, X, Y = calculate_step_risk(ground_points)
+                                
+                # # Convert the point clouds to numpy arrays
+                # ground_points = np.asarray(ground_point_cloud.points)
+                # obstacle_points = np.asarray(obstacle_point_cloud.points)
 
-                # Calculate slope risk, now aligned with step_risk_grid dimensions
-                slope_risk_grid = calculate_slope_risk(ground_points, Y,X)
-                
-                # Define obstacle grid based on obstacle points
-                obstacle_grid = np.full(step_risk_grid.shape, 0.0)
-                for i in range(len(obstacle_points)):
-                    x_idx = np.digitize(obstacle_points[i, 0], X[0]) - 1
-                    y_idx = np.digitize(obstacle_points[i, 1], Y[:, 0]) - 1
-                    if 0 <= x_idx < X.shape[0] and 0 <= y_idx < Y.shape[1]:
-                        obstacle_grid[x_idx, y_idx] = 1.0
+                # Extract X, Y, Z for ground points
+                ground_x_vals = ground_points[:, 0]
+                ground_y_vals = ground_points[:, 1]
+                ground_z_vals = ground_points[:, 2]
 
-                # Combine risks
-                combined_risk_grid = combine_risks(slope_risk_grid, step_risk_grid, obstacle_grid)
+                obstacle_x_vals = obstacle_points[:, 0]
+                obstacle_y_vals = obstacle_points[:, 1]
+                obstacle_z_vals = obstacle_points[:, 2]
 
-                # Calculate CVaR-adjusted risk
-                # cvar_combined_risk = compute_cvar_cellwise(combined_risk_grid)
+                # Define the grid resolution
+                grid_resolution = 0.1
 
-                # Plot CVaR-adjusted grid
+                # Create grid edges for X and Y based on the range of ground points
+                x_edges = np.arange(min(ground_x_vals), max(ground_x_vals) + grid_resolution, grid_resolution)
+                y_edges = np.arange(min(ground_y_vals), max(ground_y_vals) + grid_resolution, grid_resolution)
+
+                # Create meshgrid for X and Y (for ground)
+                x_mid = (x_edges[:-1] + x_edges[1:]) / 2  # Midpoints of X bins
+                y_mid = (y_edges[:-1] + y_edges[1:]) / 2  # Midpoints of Y bins
+                X, Y = np.meshgrid(x_mid, y_mid)
+
+                # Initialize an empty Z grid for ground points
+                Z_ground = np.full((len(x_mid), len(y_mid)), np.nan)
+
+                # Fill the Z grid for ground points
+                for i in range(len(ground_x_vals)):
+                    x_idx = np.digitize(ground_x_vals[i], x_edges) - 1
+                    y_idx = np.digitize(ground_y_vals[i], y_edges) - 1
+                    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
+                        Z_ground[x_idx, y_idx] = ground_z_vals[i]
+
+                # Get the list of non-NaN indices in Z_ground
+                non_nan_indices = np.argwhere(~np.isnan(Z_ground))
+
+                # Calculate the combined step and slope risk grids
+                step_risk_grid, slope_risk_grid = calculate_combined_risks(Z_ground, non_nan_indices, max_height_diff=0.05, max_slope_degrees=30.0, radius=0.5)
+
+                combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
+                masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)
+                masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)
+
+                # Calculate the mean for non-NaN elements
+                total_risk_grid = np.ma.mean([masked_step_risk, masked_slope_risk], axis=0).filled(np.nan)
+
+                # Add obstacle points to the risk grid
+                for i in range(len(obstacle_x_vals)):
+                    x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
+                    y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
+                    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
+                        total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
+
+                # Mask NaN values in total_risk_grid for transparency
+                masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
+
+                # Calculate CVaR for each grid cell
+                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid)
+
+
+
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
 
                 ax.clear()
-                c = ax.pcolormesh(X, Y, combined_risk_grid.T, shading='auto', cmap='terrain', alpha=0.7)
+                c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
 
-                # Plot obstacle points using scatter for distinct visualization
-                # ax.scatter(x_vals_obstacle, y_vals_obstacle, c='red', s=10, label='Obstacles')
-
-                # Add or update the color bar
                 if colorbar is None:
-                    colorbar = fig.colorbar(c, ax=ax, label='Ground Z Value (Height)')
+                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=Ground, 1=Obstacle)')
                 else:
                     colorbar.update_normal(c)
 
-                # Set axis labels and title
                 ax.set_xlabel('X')
                 ax.set_ylabel('Y')
-                ax.set_title('2D Grid Cell Plot of Ground and Obstacle Points')
+                ax.set_title('Risk Visualization')
 
                 plt.draw()
                 plt.pause(0.1)
 
     finally:
-        plt.ioff()  # Disable interactive mode
+        plt.ioff()
         plt.show()
