@@ -223,7 +223,7 @@ if __name__ == "__main__":
                 c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
 
                 if colorbar is None:
-                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=Ground, 1=Obstacle)')
+                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=zero risk, 1= risky)')
                 else:
                     colorbar.update_normal(c)
 
