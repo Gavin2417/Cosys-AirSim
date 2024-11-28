@@ -163,20 +163,98 @@ masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
 
 # Calculate CVaR for each grid cell
 cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid)
+print('cvar_combined_risK finished')
+start_point = np.array([-5, 0])
 
+destination_point = np.array([15,-10])
 
 # Create a custom colormap from gray to yellow to red
 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]  # Gray → Yellow → Red
 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
 
-# Plot the total risk grid
+# # Plot the total risk grid
+# fig, ax = plt.subplots()
+# c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, vmin=0, vmax=1)
+# fig.colorbar(c, ax=ax, label='Risk Value (0=Ground, 1=Obstacle)')
+
+# # Set axis labels and title
+# ax.set_xlabel('X')
+# ax.set_ylabel('Y')
+# ax.set_title('Total Risk Grid with Ground and Obstacle Data')
+
+plt.show()
+from heapq import heappop, heappush
+
+def heuristic(a, b):
+    """Calculate the Manhattan distance as the heuristic."""
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+# Convert start and destination points to grid indices
+start_idx = (
+    np.digitize(start_point[0], x_edges) - 1,
+    np.digitize(start_point[1], y_edges) - 1,
+)
+goal_idx = (
+    np.digitize(destination_point[0], x_edges) - 1,
+    np.digitize(destination_point[1], y_edges) - 1,
+)
+def astar_fixed(cost_map, start, goal):
+    """Perform A* algorithm, avoiding impassable NaN regions."""
+    rows, cols = cost_map.shape
+    open_set = []
+    heappush(open_set, (0, start))
+    came_from = {}
+    g_score = {start: 0}
+    f_score = {start: heuristic(start, goal)}
+
+    while open_set:
+        _, current = heappop(open_set)
+
+        if current == goal:
+            # Reconstruct the path
+            path = []
+            while current in came_from:
+                path.append(current)
+                current = came_from[current]
+            path.append(start)
+            return path[::-1]  # Return reversed path
+
+        x, y = current
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # 4 neighbors
+            neighbor = (x + dx, y + dy)
+            if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols:
+                # Ignore cells with NaN or infinite costs
+                if np.isnan(cost_map[neighbor[0], neighbor[1]]):
+                    continue
+
+                tentative_g_score = g_score[current] + cost_map[neighbor[0], neighbor[1]]
+                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g_score
+                    f_score[neighbor] = tentative_g_score + heuristic(neighbor, goal)
+                    heappush(open_set, (f_score[neighbor], neighbor))
+
+    return []  # Return empty list if no path is found
+
+# Run the updated A* algorithm
+path = astar_fixed(cvar_combined_risk, start_idx, goal_idx)
+
+# Visualize the path on the updated risk map
 fig, ax = plt.subplots()
 c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, vmin=0, vmax=1)
 fig.colorbar(c, ax=ax, label='Risk Value (0=Ground, 1=Obstacle)')
 
+# Overlay the fixed path
+if path:
+    path_x = [x_mid[p[0]] for p in path]
+    path_y = [y_mid[p[1]] for p in path]
+    ax.plot(path_x, path_y, color='blue', linewidth=2, label='A* Path (Fixed)')
+    ax.legend()
+
 # Set axis labels and title
 ax.set_xlabel('X')
 ax.set_ylabel('Y')
-ax.set_title('Total Risk Grid with Ground and Obstacle Data')
+ax.set_title('Total Risk Grid with Fixed A* Path')
 
 plt.show()
