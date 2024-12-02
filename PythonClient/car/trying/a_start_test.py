@@ -171,3 +171,100 @@ destination_point = np.array([15,-10])
 # Create a custom colormap from gray to yellow to red
 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]  # Gray → Yellow → Red
 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
+
+import heapq
+
+def is_valid(row, col, grid):
+    """Check if a cell is valid and within bounds."""
+    return 0 <= row < grid.shape[0] and 0 <= col < grid.shape[1]
+
+def is_unblocked(grid, row, col):
+    """Check if a cell is unblocked (not NaN and below a risk threshold)."""
+    return not np.isnan(grid[row, col]) and grid[row, col] < 1.0
+
+def calculate_h_value(row, col, dest):
+    """Calculate the heuristic value (Euclidean distance)."""
+    return np.sqrt((row - dest[0]) ** 2 + (col - dest[1]) ** 2)
+
+def trace_path(cell_details, dest):
+    """Trace the path from source to destination."""
+    path = []
+    row, col = dest
+
+    while True:
+        path.append((row, col))
+        parent_row, parent_col = cell_details[row, col]
+        if (row, col) == (parent_row, parent_col):
+            break
+        row, col = parent_row, parent_col
+
+    path.reverse()
+    return path
+
+def a_star_search(risk_grid, start_idx, dest_idx):
+    """Perform A* search on the risk map."""
+    rows, cols = risk_grid.shape
+    open_list = []
+    heapq.heappush(open_list, (0.0, start_idx))  # (f, (row, col))
+    came_from = {}
+    g_scores = np.full((rows, cols), float('inf'))
+    g_scores[start_idx] = 0
+    f_scores = np.full((rows, cols), float('inf'))
+    f_scores[start_idx] = calculate_h_value(*start_idx, dest_idx)
+    
+    cell_details = np.full((rows, cols), None, dtype=object)
+    for i in range(rows):
+        for j in range(cols):
+            cell_details[i, j] = (i, j)
+
+    while open_list:
+        _, current = heapq.heappop(open_list)
+        if current == dest_idx:
+            return trace_path(cell_details, dest_idx)
+
+        current_row, current_col = current
+        for direction in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # 4 directions
+            neighbor = (current_row + direction[0], current_col + direction[1])
+            if is_valid(*neighbor, risk_grid) and is_unblocked(risk_grid, *neighbor):
+                tentative_g_score = g_scores[current] + risk_grid[neighbor]
+
+                if tentative_g_score < g_scores[neighbor]:
+                    g_scores[neighbor] = tentative_g_score
+                    f_scores[neighbor] = tentative_g_score + calculate_h_value(*neighbor, dest_idx)
+                    heapq.heappush(open_list, (f_scores[neighbor], neighbor))
+                    cell_details[neighbor] = current
+
+    return None  # No path found
+
+# Convert start and destination points to grid indices
+start_idx = (
+    np.digitize(start_point[0], x_edges) - 1,
+    np.digitize(start_point[1], y_edges) - 1,
+)
+dest_idx = (
+    np.digitize(destination_point[0], x_edges) - 1,
+    np.digitize(destination_point[1], y_edges) - 1,
+)
+
+# Run A* search
+path = a_star_search(cvar_combined_risk, start_idx, dest_idx)
+
+# Visualize the result
+plt.figure(figsize=(10, 8))
+plt.pcolormesh(X, Y, cvar_combined_risk.T, cmap=cmap, shading='auto', vmin=0, vmax=1)
+plt.colorbar(label="Risk Value (0=Ground, 1=Obstacle)")
+
+if path:
+    path_x = [x_mid[p[0]] for p in path]
+    path_y = [y_mid[p[1]] for p in path]
+    plt.plot(path_x, path_y, color="blue", linewidth=2, label="A* Path")
+else:
+    print("No path found!")
+
+plt.scatter(start_point[0], start_point[1], color="green", label="Start", zorder=5)
+plt.scatter(destination_point[0], destination_point[1], color="red", label="Destination", zorder=5)
+plt.xlabel("X")
+plt.ylabel("Y")
+plt.legend()
+plt.title("A* Path on Risk Map")
+plt.show()
