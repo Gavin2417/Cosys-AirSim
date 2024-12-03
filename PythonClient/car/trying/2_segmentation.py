@@ -27,7 +27,7 @@ class lidarTest:
         if lidarData.time_stamp != self.lastlidarTimeStamp:
             if len(lidarData.point_cloud) < 2:
                 self.lastlidarTimeStamp = lidarData.time_stamp
-                return None
+                return None, None
             else:
                 self.lastlidarTimeStamp = lidarData.time_stamp
                 # Process lidar point cloud data
@@ -38,7 +38,7 @@ class lidarTest:
                     points = points * np.array([1, -1, 1])  # Adjust for AirSim coordinates
                 return points, lidarData.time_stamp  # Return timestamp with data
         else:
-            return None
+            return None, None
 
     def get_vehicle_pose(self):
         # Get the pose (position and orientation) of the vehicle in world coordinates
