@@ -105,4 +105,10 @@ ax.set_xlabel('X')
 ax.set_ylabel('Y')
 ax.set_title('2D Grid Cell Plot of Step Risk from PLY File')
 
+# access the values of the step risk 
+
+for i in range(len(step_risk_grid)):
+    for j in range(len(step_risk_grid[i])):
+        if step_risk_grid[i][j] > 0.5:
+            print(f"Step risk at ({X[i][j]}, {Y[i][j]}) is {step_risk_grid[i][j]}")
 plt.show()

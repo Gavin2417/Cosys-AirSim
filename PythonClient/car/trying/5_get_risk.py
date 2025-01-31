@@ -8,7 +8,7 @@ import os
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from scipy.stats import binned_statistic_2d
-from function_risk import calculate_combined_risks,compute_cvar_cellwise
+from function2 import calculate_combined_risks,compute_cvar_cellwise
 from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma  
 class lidarTest:
@@ -31,7 +31,7 @@ class lidarTest:
         if lidarData.time_stamp != self.lastlidarTimeStamp:
             if len(lidarData.point_cloud) < 2:
                 self.lastlidarTimeStamp = lidarData.time_stamp
-                return None
+                return None, None
             else:
                 self.lastlidarTimeStamp = lidarData.time_stamp
                 # Process lidar point cloud data
@@ -42,7 +42,7 @@ class lidarTest:
                     points = points * np.array([1, -1, 1])  # Adjust for AirSim coordinates
                 return points, lidarData.time_stamp  # Return timestamp with data
         else:
-            return None
+            return None, None
 
     def get_vehicle_pose(self):
         # Get the pose (position and orientation) of the vehicle in world coordinates
@@ -213,8 +213,6 @@ if __name__ == "__main__":
 
                 # Calculate CVaR for each grid cell
                 cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid)
-
-
 
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)

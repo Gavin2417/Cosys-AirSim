@@ -10,55 +10,84 @@ from scipy.interpolate import griddata
 from scipy.stats import binned_statistic_2d
 from function2 import calculate_combined_risks,compute_cvar_cellwise
 from matplotlib.colors import LinearSegmentedColormap
-import numpy.ma as ma
-from scipy.spatial import cKDTree
-import numpy as np
+import numpy.ma as ma  
+import heapq
+def find_nearest_valid_cell(risk_grid, dest_idx):
+    """Find the nearest valid and unblocked cell to the destination."""
+    rows, cols = risk_grid.shape
+    min_distance = float('inf')
+    nearest_cell = None
 
-def interpolate_in_radius(grid, radius):
-    """
-    Interpolates NaN values in a grid using valid points within a specified radius.
+    for i in range(rows):
+        for j in range(cols):
+            if is_unblocked(risk_grid, i, j):
+                distance = calculate_h_value(i, j, dest_idx)
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_cell = (i, j)
     
-    Parameters:
-        grid (ndarray): 2D grid with NaN values to interpolate.
-        radius (float): Radius within which to search for valid points.
+    return nearest_cell
+def is_valid(row, col, grid):
+    """Check if a cell is valid and within bounds."""
+    return 0 <= row < grid.shape[0] and 0 <= col < grid.shape[1]
+
+def is_unblocked(grid, row, col):
+    """Check if a cell is unblocked (not NaN and below a risk threshold)."""
+    return not np.isnan(grid[row, col]) and grid[row, col] < 1.0
+
+def calculate_h_value(row, col, dest):
+    """Calculate the heuristic value (Euclidean distance)."""
+    return np.sqrt((row - dest[0]) ** 2 + (col - dest[1]) ** 2)
+
+def trace_path(cell_details, dest):
+    """Trace the path from source to destination."""
+    path = []
+    row, col = dest
+
+    while True:
+        path.append((row, col))
+        parent_row, parent_col = cell_details[row, col]
+        if (row, col) == (parent_row, parent_col):
+            break
+        row, col = parent_row, parent_col
+
+    path.reverse()
+    return path
+
+def a_star_search(risk_grid, start_idx, dest_idx):
+    """Perform A* search on the risk map."""
+    rows, cols = risk_grid.shape
+    open_list = []
+    heapq.heappush(open_list, (0.0, start_idx))  # (f, (row, col))
+    came_from = {}
+    g_scores = np.full((rows, cols), float('inf'))
+    g_scores[start_idx] = 0
+    f_scores = np.full((rows, cols), float('inf'))
+    f_scores[start_idx] = calculate_h_value(*start_idx, dest_idx)
     
-    Returns:
-        ndarray: Grid with interpolated values.
-    """
-    # Get valid (non-NaN) points
-    valid_points = ~np.isnan(grid)
-    valid_coords = np.column_stack(np.where(valid_points))
-    valid_values = grid[valid_points]
+    cell_details = np.full((rows, cols), None, dtype=object)
+    for i in range(rows):
+        for j in range(cols):
+            cell_details[i, j] = (i, j)
 
-    # Create KDTree for efficient neighbor search
-    tree = cKDTree(valid_coords)
+    while open_list:
+        _, current = heapq.heappop(open_list)
+        if current == dest_idx:
+            return trace_path(cell_details, dest_idx)
 
-    # Get NaN points
-    nan_coords = np.column_stack(np.where(np.isnan(grid)))
+        current_row, current_col = current
+        for direction in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # 4 directions
+            neighbor = (current_row + direction[0], current_col + direction[1])
+            if is_valid(*neighbor, risk_grid) and is_unblocked(risk_grid, *neighbor):
+                tentative_g_score = g_scores[current] + risk_grid[neighbor]
 
-    # Iterate through each NaN point
-    for idx, coord in enumerate(nan_coords):
-        # Find all valid points within the radius
-        neighbors = tree.query_ball_point(coord, radius)
+                if tentative_g_score < g_scores[neighbor]:
+                    g_scores[neighbor] = tentative_g_score
+                    f_scores[neighbor] = tentative_g_score + calculate_h_value(*neighbor, dest_idx)
+                    heapq.heappush(open_list, (f_scores[neighbor], neighbor))
+                    cell_details[neighbor] = current
 
-        # If there are neighbors, compute a weighted average
-        if neighbors:
-            weights = []
-            weighted_values = []
-            for neighbor_idx in neighbors:
-                neighbor_coord = valid_coords[neighbor_idx]
-                value = valid_values[neighbor_idx]
-
-                # Compute weight based on inverse distance
-                distance = np.linalg.norm(coord - neighbor_coord)
-                weight = 1 / (distance + 1e-6)  # Add small epsilon to avoid division by zero
-                weights.append(weight)
-                weighted_values.append(weight * value)
-
-            # Interpolated value is weighted average
-            grid[coord[0], coord[1]] = np.sum(weighted_values) / np.sum(weights)
-
-    return grid
+    return None  # No path found
 class lidarTest:
     
     def __init__(self, lidar_name, vehicle_name):
@@ -79,7 +108,7 @@ class lidarTest:
         if lidarData.time_stamp != self.lastlidarTimeStamp:
             if len(lidarData.point_cloud) < 2:
                 self.lastlidarTimeStamp = lidarData.time_stamp
-                return None, None
+                return None
             else:
                 self.lastlidarTimeStamp = lidarData.time_stamp
                 # Process lidar point cloud data
@@ -90,7 +119,7 @@ class lidarTest:
                     points = points * np.array([1, -1, 1])  # Adjust for AirSim coordinates
                 return points, lidarData.time_stamp  # Return timestamp with data
         else:
-            return None, None
+            return None
 
     def get_vehicle_pose(self):
         # Get the pose (position and orientation) of the vehicle in world coordinates
@@ -199,7 +228,6 @@ if __name__ == "__main__":
 
                 ground_points = grid_map_ground.get_height_estimate()
                 obstacle_points = grid_map_obstacle.get_height_estimate()
-
                                 
                 # # Convert the point clouds to numpy arrays
                 # ground_points = np.asarray(ground_point_cloud.points)
@@ -255,35 +283,64 @@ if __name__ == "__main__":
                     y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
                     if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
                         total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
-                
-                # Interpolate missing (NaN) values in the risk grid
-                interpolation_radius = 1.5  # Set the interpolation radius
-                total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
 
                 # Mask NaN values in total_risk_grid for transparency
                 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
 
                 # Calculate CVaR for each grid cell
                 cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid)
+                start_point = position[:2]
+                destination_point = np.array([15, -10])  # Example destination
 
+               
+                start_idx = (
+                    np.digitize(start_point[0], x_edges) - 1,
+                    np.digitize(start_point[1], y_edges) - 1,
+                )
+                dest_idx = (
+                    np.digitize(destination_point[0], x_edges) - 1,
+                    np.digitize(destination_point[1], y_edges) - 1,
+                )
+
+                # Check if the destination point is valid; if not, find the nearest valid cell
+                if not is_valid(*dest_idx, cvar_combined_risk) or not is_unblocked(cvar_combined_risk, *dest_idx):
+                    print("Destination point is blocked. Finding the nearest valid cell...")
+                    dest_idx = find_nearest_valid_cell(cvar_combined_risk, dest_idx)
+
+                if dest_idx is None:
+                    print("No valid destination point found on the risk map!")
+                    continue
+
+                # Run A* search
+                path = a_star_search(cvar_combined_risk, start_idx, dest_idx)
+
+                # Visualization
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
 
                 ax.clear()
                 c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
-
                 if colorbar is None:
-                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=zero risk, 1= risky)')
+                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=zero risk, 1=high risk)')
                 else:
                     colorbar.update_normal(c)
 
-                ax.set_xlabel('X')
-                ax.set_ylabel('Y')
-                ax.set_title('Risk Visualization')
+                if path:
+                    path_x = [x_mid[p[0]] for p in path]
+                    path_y = [y_mid[p[1]] for p in path]
+                    ax.plot(path_x, path_y, color="blue", linewidth=2, label="A* Path")
+                else:
+                    print("No path found!")
+
+                ax.scatter(start_point[0], start_point[1], color="green", label="Start", zorder=5)
+                ax.scatter(destination_point[0], destination_point[1], color="red", label="Destination", zorder=5)
+                ax.set_xlabel("X")
+                ax.set_ylabel("Y")
+                ax.legend()
+                ax.set_title("A* Path on Risk Map")
 
                 plt.draw()
                 plt.pause(0.1)
-
     finally:
         plt.ioff()
         plt.show()
