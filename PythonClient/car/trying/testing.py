@@ -34,6 +34,7 @@ for x, y, z in points:
     y_idx = np.digitize(y, y_edges) - 1
     if 0 <= x_idx < X.shape[1] and 0 <= y_idx < X.shape[0]:
         Z[y_idx, x_idx] = z  # Assign z value to the corresponding grid cell
+    
 
 # Plot the grid
 plt.figure(figsize=(8, 6))

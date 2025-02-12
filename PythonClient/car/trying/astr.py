@@ -155,6 +155,82 @@ class GridMap:
             x, y = cell
             estimated_points.append([x * self.resolution, y * self.resolution, avg_z])
         return np.array(estimated_points)
+    
+import numpy as np
+import numpy.ma as ma
+import heapq
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+
+def is_valid(row, col, grid):
+    return 0 <= row < grid.shape[0] and 0 <= col < grid.shape[1]
+
+def is_unblocked(grid, row, col):
+    return not np.isnan(grid[row, col]) and grid[row, col] < 1.0
+
+def calculate_h_value(row, col, dest):
+    return np.sqrt((row - dest[0]) ** 2 + (col - dest[1]) ** 2)
+
+def trace_path(cell_details, dest):
+    path = []
+    row, col = dest
+    while True:
+        path.append((row, col))
+        parent_row, parent_col = cell_details[row, col]
+        if (row, col) == (parent_row, parent_col):
+            break
+        row, col = parent_row, parent_col
+    path.reverse()
+    return path
+
+def find_nearest_valid(dest_idx, grid):
+    queue = [dest_idx]
+    visited = set()
+    while queue:
+        row, col = queue.pop(0)
+        if is_valid(row, col, grid) and not np.isnan(grid[row, col]):
+            return (row, col)
+        for d in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            neighbor = (row + d[0], col + d[1])
+            if neighbor not in visited and is_valid(*neighbor, grid):
+                visited.add(neighbor)
+                queue.append(neighbor)
+    return None
+
+def a_star_search(risk_grid, start_idx, dest_idx):
+    rows, cols = risk_grid.shape
+    open_list = []
+    heapq.heappush(open_list, (0.0, start_idx))
+    came_from = {}
+    g_scores = np.full((rows, cols), float('inf'))
+    g_scores[start_idx] = 0
+    f_scores = np.full((rows, cols), float('inf'))
+    f_scores[start_idx] = calculate_h_value(*start_idx, dest_idx)
+    cell_details = np.full((rows, cols), None, dtype=object)
+    
+    for i in range(rows):
+        for j in range(cols):
+            cell_details[i, j] = (i, j)
+
+    while open_list:
+        _, current = heapq.heappop(open_list)
+        if current == dest_idx:
+            return trace_path(cell_details, dest_idx)
+
+        current_row, current_col = current
+        for direction in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            neighbor = (current_row + direction[0], current_col + direction[1])
+            if is_valid(*neighbor, risk_grid) and is_unblocked(risk_grid, *neighbor):
+                tentative_g_score = g_scores[current] + risk_grid[neighbor]
+                if tentative_g_score < g_scores[neighbor]:
+                    g_scores[neighbor] = tentative_g_score
+                    f_scores[neighbor] = tentative_g_score + calculate_h_value(*neighbor, dest_idx)
+                    heapq.heappush(open_list, (f_scores[neighbor], neighbor))
+                    cell_details[neighbor] = current
+
+    return None
+
+
 # Main
 if __name__ == "__main__":
     # Initialize Lidar test
@@ -269,20 +345,51 @@ if __name__ == "__main__":
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
 
-                ax.clear()
-                c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
+                start_point = np.array([-5, 0])
+                destination_point = np.array([15, -10])
+                x_edges = np.linspace(-10, 20, 51)
+                y_edges = np.linspace(-15, 15, 51)
+                
+                start_idx = (
+                    np.digitize(start_point[0], x_edges) - 1,
+                    np.digitize(start_point[1], y_edges) - 1,
+                )
+                dest_idx = (
+                    np.digitize(destination_point[0], x_edges) - 1,
+                    np.digitize(destination_point[1], y_edges) - 1,
+                )
+                
+                if np.isnan(total_risk_grid[dest_idx]):
+                    dest_idx = find_nearest_valid(dest_idx, total_risk_grid)
+                
+                path = a_star_search(total_risk_grid, start_idx, dest_idx) if dest_idx else None
+                
+                cmap = LinearSegmentedColormap.from_list("gray_yellow_red", [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)])
+
+                ax.clear()  
+                c = ax.pcolormesh(X, Y, total_risk_grid.T, cmap=cmap, shading='auto', vmin=0, vmax=1)
 
                 if colorbar is None:
-                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=zero risk, 1= risky)')
+                    colorbar = fig.colorbar(c, ax=ax, label="Risk Value")
                 else:
                     colorbar.update_normal(c)
 
-                ax.set_xlabel('X')
-                ax.set_ylabel('Y')
-                ax.set_title('Risk Visualization')
+                if path:
+                    path_x = [x_edges[p[0]] for p in path]
+                    path_y = [y_edges[p[1]] for p in path]
+                    ax.plot(path_x, path_y, color="blue", linewidth=2, label="A* Path")
+                else:
+                    print("No path found!")
+
+                ax.scatter(start_point[0], start_point[1], color="green", label="Start", zorder=5)
+                ax.scatter(destination_point[0], destination_point[1], color="red", label="Destination", zorder=5)
+
+                ax.legend()
+                ax.set_title("A* Path on Risk Map")
 
                 plt.draw()
                 plt.pause(0.1)
+
 
     finally:
         plt.ioff()
