@@ -155,6 +155,10 @@ class GridMap:
             x, y = cell
             estimated_points.append([x * self.resolution, y * self.resolution, avg_z])
         return np.array(estimated_points)
+
+def filter_points_by_radius(points, center, radius):
+    distances = np.linalg.norm(points[:, :2] - center, axis=1)
+    return points[distances <= radius]
 # Main
 if __name__ == "__main__":
     # Initialize Lidar test
@@ -200,6 +204,13 @@ if __name__ == "__main__":
                 ground_points = grid_map_ground.get_height_estimate()
                 obstacle_points = grid_map_obstacle.get_height_estimate()
 
+                # Apply radius filtering
+                vehicle_x, vehicle_y = position[0], position[1]
+                center = np.array([vehicle_x, vehicle_y])
+                radius = 15
+
+                ground_points = filter_points_by_radius(ground_points, center, radius)
+                obstacle_points = filter_points_by_radius(obstacle_points, center, radius)
 
                 # Extract X, Y, Z for ground points
                 ground_x_vals = ground_points[:, 0]
@@ -266,7 +277,7 @@ if __name__ == "__main__":
                 # Calculate the distance from each grid cell center to the vehicle position
                 distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
                 # Set risk values to NaN where the distance is greater than 10
-                cvar_combined_risk[distance_from_vehicle.T > 10] = np.nan
+                cvar_combined_risk[distance_from_vehicle.T > 13.0] = np.nan
 
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
