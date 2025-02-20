@@ -247,7 +247,9 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()  # No 'projection=3d'
     plt.ion()  # Enable interactive mode
     colorbar = None
-    
+    path = None
+    temp_dest = None
+    temp_path = None
     try:
         while True:
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
@@ -265,8 +267,10 @@ if __name__ == "__main__":
                     x, y, z = point
                     if label[i] == 1:
                         grid_map_ground.add_point(x, y, z, timestamp)
-                    elif z > -0.2:
+                    elif z > -position[2]:
                         grid_map_obstacle.add_point(x, y, z, timestamp)
+                    else:
+                        grid_map_ground.add_point(x, y, z, timestamp)
 
                 # Retrieve height estimates.
                 ground_points = grid_map_ground.get_height_estimate()
@@ -277,16 +281,11 @@ if __name__ == "__main__":
                 center = np.array([vehicle_x, vehicle_y])
                 radius = 15
                 ground_points = filter_points_by_radius(ground_points, center, radius)
-                obstacle_points = filter_points_by_radius(obstacle_points, center, radius)
 
                 # Extract X, Y, Z for ground and obstacle points.
                 ground_x_vals = ground_points[:, 0]
                 ground_y_vals = ground_points[:, 1]
                 ground_z_vals = ground_points[:, 2]
-
-                obstacle_x_vals = obstacle_points[:, 0]
-                obstacle_y_vals = obstacle_points[:, 1]
-                obstacle_z_vals = obstacle_points[:, 2]
 
                 # Define the grid resolution and create grid edges.
                 grid_resolution = 0.1
@@ -314,41 +313,54 @@ if __name__ == "__main__":
                 masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)
                 total_risk_grid = np.ma.mean([masked_step_risk, masked_slope_risk], axis=0).filled(np.nan)
 
-                # Mark obstacle cells as high risk.
-                for i in range(len(obstacle_x_vals)):
-                    x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
-                    y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
-                    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-                        total_risk_grid[x_idx, y_idx] = 1.0
+                if obstacle_points.size != 0:
+                    obstacle_points = filter_points_by_radius(obstacle_points, center, radius)
+                    
+                    obstacle_x_vals = obstacle_points[:, 0]
+                    obstacle_y_vals = obstacle_points[:, 1]
+                    obstacle_z_vals = obstacle_points[:, 2]
+
+                    # Add obstacle points to the risk grid
+                    for i in range(len(obstacle_x_vals)):
+                        x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
+                        y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
+                        if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
+                            total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
 
                 # Interpolate missing values in the risk grid.
                 interpolation_radius = 1.5
                 total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
                 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid)
+                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.2)
 
                 # Optionally mask cells far from the vehicle.
                 distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
                 cvar_combined_risk[distance_from_vehicle.T > 13.0] = np.nan
 
-                # ---------------------------------------------------------------------
-                # A* Path Planning: Define start and destination grid indices.
-                # ---------------------------------------------------------------------
                 # Convert vehicle position to grid indices.
                 start_idx = (np.digitize(vehicle_x, x_edges) - 1, np.digitize(vehicle_y, y_edges) - 1)
-                # Define a desired destination point (world coordinates); change as needed.
                 destination_point = np.array([10, -5])
                 dest_idx = (np.digitize(destination_point[0], x_edges) - 1, np.digitize(destination_point[1], y_edges) - 1)
                 # Clamp destination indices within grid bounds.
                 dest_idx = (min(max(dest_idx[0], 0), len(x_mid) - 1), min(max(dest_idx[1], 0), len(y_mid) - 1))
+            
 
                 # Only plan a path if the start cell is valid.
+                update_path = False
                 if np.isnan(cvar_combined_risk[start_idx[0], start_idx[1]]):
                     path = None
                 else:
-                    path = a_star_search(cvar_combined_risk, start_idx, dest_idx)
-                    # If no path was found, choose a candidate destination.
-                    if path is None:
+   
+                    dest_to_temp_dest = 0
+                    get_temp_dest_value = 0
+                    if temp_dest is not None:
+                        # Compute distance from the temporary destination to the desired destination.
+                        temp_start_point = (x_edges[start_idx[0]], y_edges[start_idx[1]])
+                        dest_to_temp_dest = np.linalg.norm(np.array(temp_dest) - np.array(temp_start_point))
+                        get_temp_dest_value = cvar_combined_risk[np.digitize(temp_dest[0], x_edges) - 1, np.digitize(temp_dest[1], y_edges) - 1]
+
+
+                    if  path is None  or dest_to_temp_dest < 1.2 or get_temp_dest_value ==1:
                         valid_indices = np.argwhere(~np.isnan(cvar_combined_risk))
                         if valid_indices.size > 0:
                             # Create an array of candidate cell center coordinates.
@@ -359,6 +371,9 @@ if __name__ == "__main__":
                             best_candidate = valid_indices[np.argmin(candidate_distances)]
                             dest_idx = tuple(best_candidate)
                             path = a_star_search(cvar_combined_risk, start_idx, dest_idx)
+                            # convert grid indices to world coordinates
+                            temp_dest = (x_edges[dest_idx[0]], y_edges[dest_idx[1]])
+                            update_path = True
                         else:
                             path = None
 
@@ -377,8 +392,18 @@ if __name__ == "__main__":
                 ax.set_ylabel('Y')
                 ax.set_title('Risk Visualization with A* Path')
 
+                # Used the backup path if there is no path found
+                if not update_path and temp_path is not None:
+                        path = temp_path.copy()
+                        for j in range(len(path)):
+                            # convert world coodinates to grid indices
+                            path[j] = (np.digitize(path[j][0], x_edges) - 1, np.digitize(path[j][1], y_edges) - 1)
+                
                 # If a path was found, overlay it.
                 if path:
+                    temp_path = path.copy()
+                    for i in range(len(temp_path)):
+                        temp_path[i] = (x_edges[temp_path[i][0]], y_edges[temp_path[i][1]])
                     # Convert grid indices to world coordinates.
                     raw_path = np.array([[x_mid[cell[0]], y_mid[cell[1]]] for cell in path])
                     # Smooth the path.
