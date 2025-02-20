@@ -157,6 +157,8 @@ class GridMap:
         return np.array(estimated_points)
 
 def filter_points_by_radius(points, center, radius):
+    print(points.shape)
+
     distances = np.linalg.norm(points[:, :2] - center, axis=1)
     return points[distances <= radius]
 # Main
@@ -198,8 +200,10 @@ if __name__ == "__main__":
                     x, y, z = point
                     if label[i] == 1:
                         grid_map_ground.add_point(x, y, z, timestamp)
-                    elif z > -0.2:
+                    elif z > -position[2]:
                         grid_map_obstacle.add_point(x, y, z, timestamp)
+                    else:
+                        grid_map_ground.add_point(x, y, z, timestamp)
 
                 ground_points = grid_map_ground.get_height_estimate()
                 obstacle_points = grid_map_obstacle.get_height_estimate()
@@ -210,16 +214,11 @@ if __name__ == "__main__":
                 radius = 15
 
                 ground_points = filter_points_by_radius(ground_points, center, radius)
-                obstacle_points = filter_points_by_radius(obstacle_points, center, radius)
-
+                
                 # Extract X, Y, Z for ground points
                 ground_x_vals = ground_points[:, 0]
                 ground_y_vals = ground_points[:, 1]
                 ground_z_vals = ground_points[:, 2]
-
-                obstacle_x_vals = obstacle_points[:, 0]
-                obstacle_y_vals = obstacle_points[:, 1]
-                obstacle_z_vals = obstacle_points[:, 2]
 
                 # Define the grid resolution
                 grid_resolution = 0.1
@@ -255,13 +254,8 @@ if __name__ == "__main__":
 
                 # Calculate the mean for non-NaN elements
                 total_risk_grid = np.ma.mean([masked_step_risk, masked_slope_risk], axis=0).filled(np.nan)
-
-                # Add obstacle points to the risk grid
-                for i in range(len(obstacle_x_vals)):
-                    x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
-                    y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
-                    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-                        total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
+                
+                
                 
                 # Interpolate missing (NaN) values in the risk grid
                 interpolation_radius = 1.5  # Set the interpolation radius

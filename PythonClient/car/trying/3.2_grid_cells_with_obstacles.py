@@ -177,7 +177,7 @@ if __name__ == "__main__":
                 z_vals_obstacle = obstacle_points[:, 2]
 
                 # Define the grid resolution
-                grid_resolution = 0.05
+                grid_resolution = 0.1
 
                 # Create grid edges for X and Y based on the range of ground points
                 x_edges = np.arange(min(x_vals_ground), max(x_vals_ground) + grid_resolution, grid_resolution)
@@ -198,12 +198,20 @@ if __name__ == "__main__":
                     if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
                         Z_ground[x_idx, y_idx] = z_vals_ground[i]
 
+                #  fill the Z grid for obstacle points
+                for i in range(len(x_vals_obstacle)):
+                    x_idx = np.digitize(x_vals_obstacle[i], x_edges) - 1
+                    y_idx = np.digitize(y_vals_obstacle[i], y_edges) - 1
+                    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
+                        Z_ground[x_idx, y_idx] = z_vals_obstacle[i]
+
+
                 # Clear previous plot and plot ground points using pcolormesh
                 ax.clear()
                 c = ax.pcolormesh(X, Y, Z_ground.T, shading='auto', cmap='terrain', alpha=0.7)
 
-                # Plot obstacle points using scatter for distinct visualization
-                ax.scatter(x_vals_obstacle, y_vals_obstacle, c='red', s=10, label='Obstacles')
+                # # Plot obstacle points using scatter for distinct visualization
+                # ax.scatter(x_vals_obstacle, y_vals_obstacle, c='red', s=10, label='Obstacles')
 
                 # Add or update the color bar
                 if colorbar is None:

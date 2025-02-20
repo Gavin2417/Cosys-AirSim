@@ -65,7 +65,7 @@ def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.5, max_s
     return step_risk_grid, slope_risk_grid
 
 
-def compute_cvar_cellwise(risk_grid, alpha=0.75):
+def compute_cvar_cellwise(risk_grid, alpha=0.70):
     """
     Optimized computation of CVaR for a grid, assuming a normal distribution for risks.
     """

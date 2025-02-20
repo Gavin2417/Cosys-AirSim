@@ -383,6 +383,7 @@ if __name__ == "__main__":
                 ax.set_title('Risk Visualization with A* Path')
                 # lidar_test.client.setCarControls(airsim.CarControls(throttle=0.05, steering=0), 'CPHusky')
                 # If a path exists, overlay it.
+                
                 if current_path:
                     print("Path found!")
                     raw_path = np.array([[x_mid[cell[0]], y_mid[cell[1]]] for cell in current_path])
