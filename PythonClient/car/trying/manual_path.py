@@ -289,10 +289,23 @@ if __name__ == "__main__":
 
                 # Define the grid resolution and create grid edges.
                 grid_resolution = 0.1
-                x_edges = np.arange(min(ground_x_vals), max(ground_x_vals) + grid_resolution, grid_resolution)
-                y_edges = np.arange(min(ground_y_vals), max(ground_y_vals) + grid_resolution, grid_resolution)
-                x_mid = (x_edges[:-1] + x_edges[1:]) / 2  # Midpoints of X bins.
-                y_mid = (y_edges[:-1] + y_edges[1:]) / 2  # Midpoints of Y bins.
+                margin = 1
+                start_world = np.array([-1, 0])  # current vehicle position
+                destination_point = np.array([10, -5])     
+                # Compute the bounding box limits
+                min_x = min(start_world[0], destination_point[0]) - margin
+                max_x = max(start_world[0], destination_point[0]) + margin
+                min_y = min(start_world[1], destination_point[1]) - margin
+                max_y = max(start_world[1], destination_point[1]) + margin
+
+                # Define grid resolution (cell size in meters)
+                grid_resolution = 0.1
+
+                # Create fixed grid edges and midpoints
+                x_edges = np.arange(min_x, max_x + grid_resolution, grid_resolution)
+                y_edges = np.arange(min_y, max_y + grid_resolution, grid_resolution)
+                x_mid = (x_edges[:-1] + x_edges[1:]) / 2  # Fixed midpoints of X bins.
+                y_mid = (y_edges[:-1] + y_edges[1:]) / 2  # Fixed midpoints of Y bins.
                 X, Y = np.meshgrid(x_mid, y_mid)
 
                 # Initialize a Z grid for ground points.
@@ -341,45 +354,7 @@ if __name__ == "__main__":
                 start_idx = (np.digitize(vehicle_x, x_edges) - 1, np.digitize(vehicle_y, y_edges) - 1)
                 destination_point = np.array([10, -5])
                 dest_idx = (np.digitize(destination_point[0], x_edges) - 1, np.digitize(destination_point[1], y_edges) - 1)
-                # Clamp destination indices within grid bounds.
-                dest_idx = (min(max(dest_idx[0], 0), len(x_mid) - 1), min(max(dest_idx[1], 0), len(y_mid) - 1))
-            
-
-                # Only plan a path if the start cell is valid.
-                update_path = False
-                if np.isnan(cvar_combined_risk[start_idx[0], start_idx[1]]):
-                    path = None
-                else:
    
-                    dest_to_temp_dest = 0
-                    get_temp_dest_value = 0
-                    if temp_dest is not None:
-                        # Compute distance from the temporary destination to the desired destination.
-                        temp_start_point = (x_edges[start_idx[0]], y_edges[start_idx[1]])
-                        dest_to_temp_dest = np.linalg.norm(np.array(temp_dest) - np.array(temp_start_point))
-                        get_temp_dest_value = cvar_combined_risk[np.digitize(temp_dest[0], x_edges) - 1, np.digitize(temp_dest[1], y_edges) - 1]
-
-
-                    if  path is None  or dest_to_temp_dest < 1.2 or get_temp_dest_value ==1:
-                        valid_indices = np.argwhere(~np.isnan(cvar_combined_risk))
-                        if valid_indices.size > 0:
-                            # Create an array of candidate cell center coordinates.
-                            candidate_centers = np.column_stack((x_mid[valid_indices[:, 0]], y_mid[valid_indices[:, 1]]))
-                            # Compute distances from candidate centers to the desired destination.
-                            candidate_distances = np.linalg.norm(candidate_centers - destination_point, axis=1)
-                            # Select the candidate with the smallest distance.
-                            best_candidate = valid_indices[np.argmin(candidate_distances)]
-                            dest_idx = tuple(best_candidate)
-                            path = a_star_search(cvar_combined_risk, start_idx, dest_idx)
-                            # convert grid indices to world coordinates
-                            temp_dest = (x_edges[dest_idx[0]], y_edges[dest_idx[1]])
-                            update_path = True
-                        else:
-                            path = None
-
-                # ---------------------------------------------------------------------
-                # Visualization: Plot the risk map and the computed A* path.
-                # ---------------------------------------------------------------------
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
                 ax.clear()
@@ -392,23 +367,30 @@ if __name__ == "__main__":
                 ax.set_ylabel('Y')
                 ax.set_title('Risk Visualization with A* Path')
 
-                # Used the backup path if there is no path found
-                if not update_path and temp_path is not None:
-                        path = temp_path.copy()
-                        for j in range(len(path)):
-                            # convert world coodinates to grid indices
-                            path[j] = (np.digitize(path[j][0], x_edges) - 1, np.digitize(path[j][1], y_edges) - 1)
                 
-                # If a path was found, overlay it.
-                if path:
-                    temp_path = path.copy()
-                    for i in range(len(temp_path)):
-                        temp_path[i] = (x_edges[temp_path[i][0]], y_edges[temp_path[i][1]])
-                    # Convert grid indices to world coordinates.
-                    raw_path = np.array([[x_mid[cell[0]], y_mid[cell[1]]] for cell in path])
-                    # Smooth the path.
-                    smoothed_path = smooth_path(raw_path, window_size=5)
-                    ax.plot(smoothed_path[:, 0], smoothed_path[:, 1], color="blue", linewidth=2, label="Smoothed A* Path")
+                # convert to  greid points
+                manual_path = [
+                    (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0),
+                    (6, 0), (7, 0), (8, 0), (8,-1), (8,-2), (8,-3), (8,-4), (8,-5), (9,-5), (10,-5), (10,-6)
+                ]
+                temp_i = []
+                for pt in manual_path:
+                    x_idx = np.digitize(pt[0], x_edges) - 1
+                    y_idx = np.digitize(pt[1], y_edges) - 1
+                    # Ensure indices remain within the bounds of x_mid and y_mid.
+                    x_idx = np.clip(x_idx, 0, len(x_mid) - 1)
+                    y_idx = np.clip(y_idx, 0, len(y_mid) - 1)
+                    temp_i.append((x_idx, y_idx))
+                # Convert manual path grid coordinates to world coordinates.
+                # Here, x_mid and y_mid are assumed to be 1D arrays representing the midpoints of grid cells.
+                manual_path_world = np.array([[x_mid[x_idx], y_mid[y_idx]] for x_idx, y_idx in temp_i])
+
+                # Optionally, smooth the manual path.
+                smoothed_manual_path = smooth_path(manual_path_world, window_size=5)
+
+                # Plot the manual path.
+                ax.plot(smoothed_manual_path[:, 0], smoothed_manual_path[:, 1],
+                        color="magenta", linestyle="--", linewidth=2, label="Manual Path")
 
                 # Mark the start and destination.
                 ax.scatter(vehicle_x, vehicle_y, color="green", label="Start", zorder=5)
@@ -421,3 +403,10 @@ if __name__ == "__main__":
     finally:
         plt.ioff()
         plt.show()
+
+        manual_path = [
+    (0, 0), (1, 0), (2, 0), (3, 0), (4, 0),  # Move straight along X-axis
+    (5, 0), (6, 0), (7, 0), (8, 0), (9, 0),
+    (10, 0), (10, -1), (10, -2), (10, -3), (10, -4), (10, -5)  # Turn left and reach destination
+]
+
