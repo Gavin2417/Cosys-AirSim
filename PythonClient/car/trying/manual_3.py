@@ -250,7 +250,7 @@ class PIDController:
 if __name__ == "__main__":
     # Initialize Lidar test and grid maps.
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
-    # lidar_test.client.enableApiControl(True, 'CPHusky')
+    lidar_test.client.enableApiControl(True, 'CPHusky')
     grid_map_ground = GridMap(resolution=0.1)
     grid_map_obstacle = GridMap(resolution=0.1)
 
@@ -265,8 +265,8 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()
     plt.ion()
     colorbar = None
-    # steering_pid = PIDController(kp=1.0, ki=0.05, kd=0.1, dt=0.1)
-    # forward_pid  = PIDController(kp=1.0, ki=0.05, kd=0.1, dt=0.1)  # Adjust gains as needed
+    steering_pid = PIDController(kp=1.0, ki=0.05, kd=0.1, dt=0.1)
+    forward_pid  = PIDController(kp=1.0, ki=0.05, kd=0.1, dt=0.1)  # Adjust gains as needed
     # Define a manual path (grid coordinates) and convert to world coordinates later.
     manual_path = [
         (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0),
@@ -405,6 +405,10 @@ if __name__ == "__main__":
                 # max_curvature = 1.0       # Tunable: maximum expected curvature for normalization
 
                 # Find a target point on the smoothed manual path that is at least lookahead_distance away
+                lookahead_distance = 2.0  # Tunable: desired lookahead distance in meters
+                # max_curvature = 1.0       # Tunable: maximum expected curvature for normalization
+
+                # Find a target point on the smoothed manual path that is at least lookahead_distance away
                 if current_target_index < len(smoothed_manual_path):
                     # Get the current target point.
                     target_point = smoothed_manual_path[current_target_index]
@@ -412,14 +416,47 @@ if __name__ == "__main__":
                     # Calculate the distance to the target point.
                     distance_to_target = np.linalg.norm(np.array(target_point) - np.array([vehicle_x, vehicle_y]))
                     
-                    # If the vehicle is close enough, move to the next waypoint.
-                    if distance_to_target < 2:
+                    # If the vehicle is close esnough, move to the next waypoint.
+                    if distance_to_target < 3:
                         current_target_index += 3
                         # Optionally, ensure we don't exceed the path length.
                         current_target_index = min(current_target_index, len(smoothed_manual_path) - 1)
                         target_point = smoothed_manual_path[current_target_index]
-                    print("target point", target_point)
+                # Compute differences in world coordinates
+                dx = target_point[0] - vehicle_x
+                dy = target_point[1] - vehicle_y
 
+                # Compute current heading from the rotation matrix (assuming heading is given by the first column)
+                current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+
+                # Transform the target point into the vehicle's coordinate frame.
+                # In the vehicle frame, x_r is forward and y_r is lateral.
+                x_r = math.cos(current_heading) * dx + math.sin(current_heading) * dy
+                y_r = -math.sin(current_heading) * dx + math.cos(current_heading) * dy
+
+                # Compute the distance L to the target point in the robot frame.
+                L = np.sqrt(x_r**2 + y_r**2)
+                if L < 1e-6:
+                    curvature = 0.0
+                else:
+                    curvature = (2.0 * y_r) / (L**2)
+
+                # Normalize the curvature to obtain a steering command in the range [-1, 1]s
+                steering = curvature 
+                print("Steering:", steering)
+
+
+                steering = np.clip(steering, -1.0, 1.0)
+
+                # print("Pure Pursuit Target:", target_point, "Distance:", L, "Curvature:", curvature, "Steering:", steering)
+
+                # Set a constant throttle (adjust as needed)
+                throttle = 0.028
+
+                # Send commands to the vehicle.
+                lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
+                                                lidar_test.vehicleName)
+                    # -------------------------------
                 
                 plt.draw()
                 plt.pause(0.1)

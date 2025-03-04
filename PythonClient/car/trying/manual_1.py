@@ -236,14 +236,14 @@ class PIDController:
         self.prev_error = 0.0
 
     def compute(self, error):
-        self.integral += error * self.dt
+        self.integral += (error * self.dt)
         derivative = (error - self.prev_error) / self.dt
         output = self.kp * error + self.ki * self.integral + self.kd * derivative
         self.prev_error = error
         return output
 
 # Instantiate the PID controller (tune kp, ki, kd as needed)
-steering_pid = PIDController(kp=0.75, ki=0.01, kd=0.25, dt=0.1)
+# steering_pid = PIDController(kp=0.5, ki=0.01, kd=0.25, dt=0.1)
 
 
 
@@ -265,14 +265,16 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()
     plt.ion()
     colorbar = None
-
+    steering_pid = PIDController(kp=0.8, ki=0.00, kd=0.025, dt=0.1)
+    forward_pid  = PIDController(kp=0.5, ki=0.075, kd=0.05, dt=0.1)
     # Define a manual path (grid coordinates) and convert to world coordinates later.
     manual_path = [
         (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0),
         (6, 0), (7, 0), (8, 0), (8, -1), (8, -2), (8, -3), (8, -4), (8, -5),
-        (9, -5), (10, -5), (10, -6)
+        (9, -5), (10, -5), (10, -6), (11, -6),(10, -6), (9, -6), (8, -6), (7, -6),
+        (6, -6), (5, -6), (4, -6), (3, -6), (2, -6), (1, -6), (0, -6), (-1, -6)
     ]
-    
+    current_target_index = 0
     try:
         while True:
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
@@ -312,7 +314,7 @@ if __name__ == "__main__":
                 grid_resolution = 0.1
                 margin = 1
                 start_world = np.array([-1, 0])
-                destination_point = np.array([10, -5])
+                destination_point = np.array([14, -6])
                 min_x = min(start_world[0], destination_point[0]) - margin
                 max_x = max(start_world[0], destination_point[0]) + margin
                 min_y = min(start_world[1], destination_point[1]) - margin
@@ -399,27 +401,69 @@ if __name__ == "__main__":
                 # PID Control for Following the Manual Path
                 # -------------------------------
                 # Select a lookahead waypoint along the smoothed manual path.
-                if len(smoothed_manual_path) > 0:
-                    lookahead_idx = min(5, len(smoothed_manual_path) - 1)
-                    target_point = smoothed_manual_path[lookahead_idx]
-                    # Compute desired heading (angle towards target point).
+                if current_target_index < len(smoothed_manual_path):
+                    # Get the current target point.
+                    target_point = smoothed_manual_path[current_target_index]
+                    
+                    # Calculate the distance to the target point.
+                    distance_to_target = np.linalg.norm(np.array(target_point) - np.array([vehicle_x, vehicle_y]))
+                    
+                    # If the vehicle is close enough, move to the next waypoint.
+                    if distance_to_target < 2:
+                        current_target_index += 2
+                        # Optionally, ensure we don't exceed the path length.
+                        current_target_index = min(current_target_index, len(smoothed_manual_path) - 1)
+                        target_point = smoothed_manual_path[current_target_index]
+                    # target_point = [4.95, 0.05]
+                    print("target point", target_point)
+                    # Compute desired heading (angle towards target point)
                     desired_heading = math.atan2(target_point[1] - vehicle_y,
-                                                 target_point[0] - vehicle_x)
+                                                target_point[0] - vehicle_x)
                     # Compute current heading from the rotation matrix.
                     current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
-                    # Calculate heading error and wrap to [-pi, pi].
-                    error = desired_heading - current_heading
-                    error = (error + math.pi) % (2 * math.pi) - math.pi
+                    
+                    # Calculate heading error and wrap to [-pi, pi]
+                    heading_error = desired_heading - current_heading
+                    heading_error = (heading_error + math.pi) % (2 * math.pi) - math.pi
+
                     # Use PID controller to compute steering command.
-                    steering = steering_pid.compute(error)
-                    steering = max(min(steering, 1.0), -1.0)
-                    # Set a constant throttle (adjust as needed).
-                    throttle = 0.3
-                    lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering), lidar_test.vehicleName)
-                # -------------------------------
+                    steering = steering_pid.compute(heading_error)
+                    print("steering", steering)
+                    steering = max(min(steering, 1), -1)
+                    # steering = -np.clip(steering, -1.0, 1.0)
+                    
+                    # ---- Forward (Throttle) Control ----
+                    # Compute forward error as projection onto the vehicle's heading.
+                    dx = target_point[0] - vehicle_x
+                    dy = target_point[1] - vehicle_y
+                    forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
+                    # Use PID controller to compute throttle command.
+                    throttle = forward_pid.compute(forward_error)
+                    # Clamp throttle to a suitable range (e.g., 0.0 to 1.0).
+                    # print("min thro", throttle)
+                    throttle = max(min(throttle, 0.0275), 0.0275)
+                    if steering > 0.75 or steering < -0.75:
+                        throttle = 0
+                    
+                    # print("max thro", throttle)
+                    lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
+                                                  lidar_test.vehicleName)
+                    # # -------------------------------
                 
                 plt.draw()
                 plt.pause(0.1)
+            # curretn_distnace to the last target point
+            distance_last = np.linalg.norm(np.array(smoothed_manual_path[-1]) - np.array([vehicle_x, vehicle_y]))
+            if distance_last < 1:
+                lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
+                break
+
+            # if current_target_index >= len(smoothed_manual_path):
+            #     lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
+            #     break
     finally:
         plt.ioff()
         plt.show()
+
+    # close the plot
+    plt.close()
