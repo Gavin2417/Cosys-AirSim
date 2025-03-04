@@ -250,7 +250,7 @@ class PIDController:
 if __name__ == "__main__":
     # Initialize Lidar test and grid maps.
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
-    # lidar_test.client.enableApiControl(True, 'CPHusky')
+    lidar_test.client.enableApiControl(True, 'CPHusky')
     grid_map_ground = GridMap(resolution=0.1)
     grid_map_obstacle = GridMap(resolution=0.1)
 
@@ -265,8 +265,8 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()
     plt.ion()
     colorbar = None
-    # steering_pid = PIDController(kp=1.0, ki=0.05, kd=0.1, dt=0.1)
-    # forward_pid  = PIDController(kp=1.0, ki=0.05, kd=0.1, dt=0.1)  # Adjust gains as needed
+    steering_pid = PIDController(kp=0.55, ki=0.075, kd=0.05, dt=0.1)
+    forward_pid  = PIDController(kp=0.5, ki=0.075, kd=0.05, dt=0.1)
     # Define a manual path (grid coordinates) and convert to world coordinates later.
     manual_path = [
         (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0),
@@ -401,10 +401,6 @@ if __name__ == "__main__":
                 # PID Control for Following the Manual Path
                 # -------------------------------
                 # Select a lookahead waypoint along the smoothed manual path.
-                lookahead_distance = 2.0  # Tunable: desired lookahead distance in meters
-                # max_curvature = 1.0       # Tunable: maximum expected curvature for normalization
-
-                # Find a target point on the smoothed manual path that is at least lookahead_distance away
                 if current_target_index < len(smoothed_manual_path):
                     # Get the current target point.
                     target_point = smoothed_manual_path[current_target_index]
@@ -419,7 +415,37 @@ if __name__ == "__main__":
                         current_target_index = min(current_target_index, len(smoothed_manual_path) - 1)
                         target_point = smoothed_manual_path[current_target_index]
                     print("target point", target_point)
+                    # Compute desired heading (angle towards target point)
+                    desired_heading = math.atan2(target_point[1] - vehicle_y,
+                                                target_point[0] - vehicle_x)
+                    # Compute current heading from the rotation matrix.
+                    current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+                    
+                    # Calculate heading error and wrap to [-pi, pi]
+                    heading_error = desired_heading - current_heading
+                    heading_error = (heading_error + math.pi) % (2 * math.pi) - math.pi
 
+                    # Use PID controller to compute steering command.
+                    steering = steering_pid.compute(heading_error)
+                    print("steering", steering)
+                    steering = max(min(steering, 1), -1)
+                    # steering = -np.clip(steering, -1.0, 1.0)
+                    
+                    # ---- Forward (Throttle) Control ----
+                    # Compute forward error as projection onto the vehicle's heading.
+                    dx = target_point[0] - vehicle_x
+                    dy = target_point[1] - vehicle_y
+                    forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
+                    
+                    # Use PID controller to compute throttle command.
+                    throttle = forward_pid.compute(forward_error)
+                    # Clamp throttle to a suitable range (e.g., 0.0 to 1.0).
+                    # print("min thro", throttle)
+                    throttle = max(min(throttle, 0.0275), 0.0275)
+                    # print("max thro", throttle)
+                    lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
+                                                  lidar_test.vehicleName)
+                    # -------------------------------
                 
                 plt.draw()
                 plt.pause(0.1)
