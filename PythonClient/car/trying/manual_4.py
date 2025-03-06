@@ -262,7 +262,7 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()
     plt.ion()
     colorbar = None
-    steering_pid = PIDController(kp=0.8, ki=0.00, kd=0.025, dt=0.1)
+    steering_pid = PIDController(kp=0.8462027727540303, ki=0.023914715286008515, kd=0.0939731107200599, dt=0.1)
     forward_pid  = PIDController(kp=0.5, ki=0.075, kd=0.05, dt=0.1)
     
     # Define a manual path (grid coordinates) and convert to world coordinates later.
@@ -283,7 +283,6 @@ if __name__ == "__main__":
         while True:
             current_time = time.time()
             dt = current_time - prev_time
-            print("dt", dt)
             prev_time = current_time
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
             if point_cloud_data is not None:
@@ -320,7 +319,7 @@ if __name__ == "__main__":
 
                 # Define the grid resolution and grid boundaries.
                 grid_resolution = 0.1
-                margin = 1
+                margin = 2.5
                 start_world = np.array([-1, 0])
                 destination_point = np.array([14, -6])
                 min_x = min(start_world[0], destination_point[0]) - margin
@@ -376,7 +375,7 @@ if __name__ == "__main__":
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
                 ax.clear()
-                c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
+                c = ax.pcolormesh(Y,X, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
                 if colorbar is None:
                     colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=low, 1=high)')
                 else:
@@ -399,10 +398,10 @@ if __name__ == "__main__":
                 smoothed_manual_path = smooth_path(manual_path_world, window_size=5)
                 
                 # Plot the manual path.
-                ax.plot(smoothed_manual_path[:, 0], smoothed_manual_path[:, 1],
+                ax.plot(smoothed_manual_path[:, 1], smoothed_manual_path[:, 0],
                         color="magenta", linestyle="--", linewidth=2, label="Manual Path")
-                ax.scatter(vehicle_x, vehicle_y, color="green", label="Start", zorder=5)
-                ax.scatter(destination_point[0], destination_point[1], color="red", label="Destination", zorder=5)
+                ax.scatter(vehicle_y, vehicle_x, color="green", label="Start", zorder=5)
+                ax.scatter(destination_point[1], destination_point[0], color="red", label="Destination", zorder=5)
                 ax.legend()
 
                 # -------------------------------
@@ -420,7 +419,6 @@ if __name__ == "__main__":
                         current_target_index += 2
                         current_target_index = min(current_target_index, len(smoothed_manual_path) - 1)
                         target_point = smoothed_manual_path[current_target_index]
-                    print("target point", target_point)
                     # Compute desired heading (angle towards target point)
                     desired_heading = math.atan2(target_point[1] - vehicle_y,
                                                 target_point[0] - vehicle_x)
@@ -441,7 +439,6 @@ if __name__ == "__main__":
                     dy = target_point[1] - vehicle_y
                     forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
                     throttle = forward_pid.compute(forward_error)
-                    print("throttle", throttle)
                     throttle = max(min(throttle, 0.0275), 0.0)
                     
                     if abs(steering) > 0.75:
@@ -470,7 +467,7 @@ if __name__ == "__main__":
             if distance_last < 1:
                 lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
                 break
-
+        print("total iterations", iteration)       
     finally:
         plt.ioff()
         plt.show()
