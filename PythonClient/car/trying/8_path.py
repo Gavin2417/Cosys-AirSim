@@ -13,87 +13,135 @@ from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma
 from scipy.spatial import cKDTree
 import heapq
-
-###############################################
-# A* Path Planning Functions
-###############################################
-def world_to_grid(x, y, x_edges, y_edges):
+import math 
+# ---------------------------------------------------------------------------
+# Interpolation: Fill in missing (NaN) grid cells using nearby valid cells.
+# ---------------------------------------------------------------------------
+def interpolate_in_radius(grid, radius):
     """
-    Convert world coordinates (x, y) into grid indices.
+    Interpolates NaN values in a grid using valid points within a specified radius.
     """
-    i = np.digitize(x, x_edges) - 1
-    j = np.digitize(y, y_edges) - 1
-    return int(i), int(j)
+    valid_points = ~np.isnan(grid)
+    valid_coords = np.column_stack(np.where(valid_points))
+    valid_values = grid[valid_points]
 
-def a_star_planning(risk_grid, start_idx, goal_idx, grid_resolution):
-    """
-    A* planner on a 2D grid using the risk grid as cost.
-    
-    Parameters:
-        risk_grid (2D ndarray): Grid with risk values.
-        start_idx (tuple): (i, j) starting cell indices.
-        goal_idx (tuple): (i, j) goal cell indices.
-        grid_resolution (float): Size of a grid cell.
-    
-    Returns:
-        List of (i,j) grid indices representing the path, or None if no path is found.
-    """
-    # 8-connected neighbor moves
-    neighbor_offsets = [(-1,  0), (1,  0), (0, -1), (0,  1),
-                        (-1, -1), (-1,  1), (1, -1), (1,  1)]
-    
-    def heuristic(a, b):
-        return np.linalg.norm(np.array(a) - np.array(b))
-    
-    open_set = []
-    # Heap items: (priority, cost_so_far, current_index, parent)
-    heapq.heappush(open_set, (heuristic(start_idx, goal_idx), 0, start_idx, None))
-    
-    came_from = {}
-    cost_so_far = {start_idx: 0}
-    
-    while open_set:
-        current_priority, current_cost, current, parent = heapq.heappop(open_set)
-        if current not in came_from:
-            came_from[current] = parent
+    # Create KDTree for efficient neighbor search
+    tree = cKDTree(valid_coords)
+    nan_coords = np.column_stack(np.where(np.isnan(grid)))
 
-        if current == goal_idx:
-            # Reconstruct path
-            path = []
-            node = current
-            while node is not None:
-                path.append(node)
-                node = came_from[node]
-            path.reverse()
-            return path
-        
-        for offset in neighbor_offsets:
-            neighbor = (current[0] + offset[0], current[1] + offset[1])
-            # Check bounds
-            if (neighbor[0] < 0 or neighbor[0] >= risk_grid.shape[0] or
-                neighbor[1] < 0 or neighbor[1] >= risk_grid.shape[1]):
-                continue
+    # Iterate through each NaN point
+    for idx, coord in enumerate(nan_coords):
+        neighbors = tree.query_ball_point(coord, radius)
+        if neighbors:
+            weights = []
+            weighted_values = []
+            for neighbor_idx in neighbors:
+                neighbor_coord = valid_coords[neighbor_idx]
+                value = valid_values[neighbor_idx]
+                distance = np.linalg.norm(coord - neighbor_coord)
+                weight = 1 / (distance + 1e-6)  # Avoid division by zero
+                weights.append(weight)
+                weighted_values.append(weight * value)
+            grid[coord[0], coord[1]] = np.sum(weighted_values) / np.sum(weights)
+    return grid
 
-            # Cost for moving: movement cost scaled by grid_resolution (diagonals cost more)
-            move_cost = np.linalg.norm(np.array(offset)) * grid_resolution
-            
-            # Use the risk value as additional cost. If a cell is unknown, assume high risk.
-            risk_cost = risk_grid[neighbor[0], neighbor[1]]
-            if np.isnan(risk_cost):
-                risk_cost = 1.0
+# ---------------------------------------------------------------------------
+# Helper: Filter points within a given radius.
+# ---------------------------------------------------------------------------
+def filter_points_by_radius(points, center, radius):
+    distances = np.linalg.norm(points[:, :2] - center, axis=1)
+    return points[distances <= radius]
 
-            new_cost = current_cost + move_cost + risk_cost
-            
-            if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
-                cost_so_far[neighbor] = new_cost
-                priority = new_cost + heuristic(neighbor, goal_idx)
-                heapq.heappush(open_set, (priority, new_cost, neighbor, current))
+# ---------------------------------------------------------------------------
+# A* Search Helper Functions
+# ---------------------------------------------------------------------------
+def is_valid(row, col, grid):
+    return 0 <= row < grid.shape[0] and 0 <= col < grid.shape[1]
+
+def is_unblocked(grid, row, col):
+    return (not np.isnan(grid[row, col])) and (grid[row, col] < 1.0)
+
+def calculate_h_value(row, col, dest):
+    return np.sqrt((row - dest[0]) ** 2 + (col - dest[1]) ** 2)
+
+def trace_path(cell_details, dest):
+    path = []
+    row, col = dest
+    while True:
+        path.append((row, col))
+        parent_row, parent_col = cell_details[row, col]
+        if (row, col) == (parent_row, parent_col):
+            break
+        row, col = parent_row, parent_col
+    path.reverse()
+    return path
+
+def a_star_search(risk_grid, start_idx, dest_idx):
+    rows, cols = risk_grid.shape
+    open_list = []
+    heapq.heappush(open_list, (0.0, start_idx))
+    g_scores = np.full((rows, cols), float('inf'))
+    g_scores[start_idx] = 0
+    f_scores = np.full((rows, cols), float('inf'))
+    f_scores[start_idx] = calculate_h_value(*start_idx, dest_idx)
+    cell_details = np.full((rows, cols), None, dtype=object)
+    for i in range(rows):
+        for j in range(cols):
+            cell_details[i, j] = (i, j)
     
+    while open_list:
+        _, current = heapq.heappop(open_list)
+        if current == dest_idx:
+            return trace_path(cell_details, dest_idx)
+        current_row, current_col = current
+        for direction in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            neighbor = (current_row + direction[0], current_col + direction[1])
+            if is_valid(neighbor[0], neighbor[1], risk_grid) and is_unblocked(risk_grid, neighbor[0], neighbor[1]):
+                tentative_g_score = g_scores[current] + risk_grid[neighbor]
+                if tentative_g_score < g_scores[neighbor]:
+                    g_scores[neighbor] = tentative_g_score
+                    f_scores[neighbor] = tentative_g_score + calculate_h_value(neighbor[0], neighbor[1], dest_idx)
+                    heapq.heappush(open_list, (f_scores[neighbor], neighbor))
+                    cell_details[neighbor] = current
     return None  # No path found
 
-###############################################
-# LiDAR and GridMap Classes
-###############################################
+# ---------------------------------------------------------------------------
+# Smoothing Function: Smoothens a path using a moving average filter.
+# ---------------------------------------------------------------------------
+def smooth_path(path, window_size=5):
+    """
+    Smooths a sequence of (x,y) points using a simple moving average filter.
+    
+    Parameters:
+        path (array-like): An array of points [[x1, y1], [x2, y2], ...].
+        window_size (int): The number of points to average over (should be odd).
+    
+    Returns:
+        np.ndarray: Smoothed path as an array of points.
+    """
+    path = np.array(path)
+    n_points = len(path)
+    if n_points < window_size:
+        # Not enough points to smooth; return original path.
+        return path
+
+    # If window_size is even, increment it by 1 to ensure symmetry.
+    if window_size % 2 == 0:
+        window_size += 1
+
+    half_window = window_size // 2
+    smoothed = []
+    for i in range(n_points):
+        # Define window bounds (handling the boundaries)
+        start_idx = max(0, i - half_window)
+        end_idx = min(n_points, i + half_window + 1)
+        window_average = np.mean(path[start_idx:end_idx], axis=0)
+        smoothed.append(window_average)
+    return np.array(smoothed)
+
+# ---------------------------------------------------------------------------
+# Lidar and Vehicle Pose Handling
+# ---------------------------------------------------------------------------
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
         # Connect to the AirSim simulator
@@ -109,7 +157,6 @@ class lidarTest:
             lidarData = self.client.getGPULidarData(self.lidarName, self.vehicleName)
         else:
             lidarData = self.client.getLidarData(self.lidarName, self.vehicleName)
-
         if lidarData.time_stamp != self.lastlidarTimeStamp:
             if len(lidarData.point_cloud) < 2:
                 self.lastlidarTimeStamp = lidarData.time_stamp
@@ -131,63 +178,29 @@ class lidarTest:
         vehicle_pose = self.client.simGetVehiclePose()
         position = vehicle_pose.position
         orientation = vehicle_pose.orientation
-
         position_array = np.array([float(position.x_val), float(position.y_val), float(position.z_val)])
-        rotation_matrix = self.quaternion_to_rotation_matrix(orientation)
-
+        q = orientation
+        rotation_matrix = self.quaternion_to_rotation_matrix(q)
         return position_array, rotation_matrix
 
     def quaternion_to_rotation_matrix(self, q):
-        # Convert quaternion to a 3x3 rotation matrix
         qw, qx, qy, qz = q.w_val, q.x_val, q.y_val, q.z_val
-
         rotation_matrix = np.array([
-            [1.0 - 2.0*qy*qy - 2.0*qz*qz, 2.0*qx*qy - 2.0*qz*qw,     2.0*qx*qz + 2.0*qy*qw],
-            [2.0*qx*qy + 2.0*qz*qw,       1.0 - 2.0*qx*qx - 2.0*qz*qz, 2.0*qy*qz - 2.0*qx*qw],
-            [2.0*qx*qz - 2.0*qy*qw,       2.0*qy*qz + 2.0*qx*qw,     1.0 - 2.0*qx*qx - 2.0*qy*qy],
+            [1.0 - 2.0*qy*qy - 2.0*qz*qz, 2.0*qx*qy - 2.0*qz*qw, 2.0*qx*qz + 2.0*qy*qw],
+            [2.0*qx*qy + 2.0*qz*qw, 1.0 - 2.0*qx*qx - 2.0*qz*qz, 2.0*qy*qz - 2.0*qx*qw],
+            [2.0*qx*qz - 2.0*qy*qw, 2.0*qy*qz + 2.0*qx*qw, 1.0 - 2.0*qx*qx - 2.0*qy*qy],
         ])
         return rotation_matrix
 
     def transform_to_world(self, points, position, rotation_matrix):
         # Apply rotation first, then apply translation (position)
         points_rotated = np.dot(points, rotation_matrix.T)  # Rotate points
-        points_in_world = points_rotated + position          # Translate points
+        points_in_world = points_rotated + position  # Translate points to world coordinates
         return points_in_world
 
-def interpolate_in_radius(grid, radius):
-    """
-    Interpolates NaN values in a grid using valid points within a specified radius.
-    
-    Parameters:
-        grid (ndarray): 2D grid with NaN values to interpolate.
-        radius (float): Radius within which to search for valid points.
-    
-    Returns:
-        ndarray: Grid with interpolated values.
-    """
-    valid_points = ~np.isnan(grid)
-    valid_coords = np.column_stack(np.where(valid_points))
-    valid_values = grid[valid_points]
-
-    tree = cKDTree(valid_coords)
-    nan_coords = np.column_stack(np.where(np.isnan(grid)))
-
-    for coord in nan_coords:
-        neighbors = tree.query_ball_point(coord, radius)
-        if neighbors:
-            weights = []
-            weighted_values = []
-            for neighbor_idx in neighbors:
-                neighbor_coord = valid_coords[neighbor_idx]
-                value = valid_values[neighbor_idx]
-                distance = np.linalg.norm(coord - neighbor_coord)
-                weight = 1 / (distance + 1e-6)
-                weights.append(weight)
-                weighted_values.append(weight * value)
-            grid[coord[0], coord[1]] = np.sum(weighted_values) / np.sum(weights)
-
-    return grid
-
+# ---------------------------------------------------------------------------
+# Grid Map: Accumulates ground (and obstacle) heights per cell.
+# ---------------------------------------------------------------------------
 class GridMap:
     def __init__(self, resolution):
         self.resolution = resolution
@@ -211,34 +224,71 @@ class GridMap:
             x, y = cell
             estimated_points.append([x * self.resolution, y * self.resolution, avg_z])
         return np.array(estimated_points)
+# ---------------------------------------------------------------------------
+# PID Controller for Steering and Forward Motion
+# ---------------------------------------------------------------------------
+class PIDController:
+    def __init__(self, kp, ki, kd, dt=0.1):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.dt = dt
+        self.integral = 0.0
+        self.prev_error = 0.0
 
-###############################################
-# Main
-###############################################
+    def compute(self, error):
+        self.integral += (error * self.dt)
+        derivative = (error - self.prev_error) / self.dt
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative
+        self.prev_error = error
+        return output
+    
+# ---------------------------------------------------------------------------
+# Main Loop
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Initialize LiDAR test and grid maps
+    # Initialize Lidar test and grid maps.
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
+    lidar_test.client.enableApiControl(True, 'CPHusky')
     grid_map_ground = GridMap(resolution=0.1)
     grid_map_obstacle = GridMap(resolution=0.1)
 
-    # Initialize ground segmentation object
+    # Initialize ground segmentation object with default or config file.
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
     config_path = f"{BASE_DIR}/../assets/config.toml"
-    
     if not os.path.exists(config_path):
         print(f"Config file {config_path} not found, using default parameters")
         groundseg = ground_seg()
     else:
         groundseg = ground_seg(config_path)
 
-    # Set up visualization (using matplotlib)
-    fig, ax = plt.subplots()
-    plt.ion()  # Interactive mode enabled
+    # Initialize visualizer.
+    fig, ax = plt.subplots()  # No 'projection=3d'
+    plt.ion()  # Enable interactive mode
     colorbar = None
+    path = None
+    temp_dest = None
+    temp_path = None
+    steering_pid = PIDController(kp=0.8462027727540303, ki=0.023914715286008515, kd=0.0939731107200599, dt=0.1)
+    forward_pid  = PIDController(kp=0.5, ki=0.075, kd=0.05, dt=0.1)
+    current_target_index = 0
+    # Define grid resolution and edges.
+    grid_resolution = 0.1
+    margin = 4
+    position, rotation_matrix = lidar_test.get_vehicle_pose()
+    start_point = np.array([position[0], position[1]])  # vehicle's current position
+    destination_point = np.array([14, -6]) 
+    min_x = min(start_point[0], destination_point[0]) - margin
+    max_x = max(start_point[0], destination_point[0]) + margin
+    min_y = min(start_point[1], destination_point[1]) - margin
+    max_y = max(start_point[1], destination_point[1]) + margin
 
-    # Define the final goal in world coordinates
-    final_goal_world = [10, -5]
-    
+    # Build grid edges based on these boundaries.
+    x_edges = np.arange(min_x, max_x + grid_resolution, grid_resolution)
+    y_edges = np.arange(min_y, max_y + grid_resolution, grid_resolution)
+    x_mid = (x_edges[:-1] + x_edges[1:]) / 2
+    y_mid = (y_edges[:-1] + y_edges[1:]) / 2
+    X, Y = np.meshgrid(x_mid, y_mid)
     try:
         while True:
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
@@ -248,40 +298,36 @@ if __name__ == "__main__":
 
                 position, rotation_matrix = lidar_test.get_vehicle_pose()
                 points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
-                points_world[:, 2] = -points_world[:, 2]  # Flip Z-axis if needed
+                points_world[:, 2] = -points_world[:, 2]  # Adjust Z if needed
                 label = np.array(groundseg.run(points_world))
 
-                # Separate ground and obstacle points
+                # Populate grid maps.
                 for i, point in enumerate(points_world):
                     x, y, z = point
                     if label[i] == 1:
                         grid_map_ground.add_point(x, y, z, timestamp)
-                    elif z > -0.2:
+                    elif z > -position[2]:
                         grid_map_obstacle.add_point(x, y, z, timestamp)
+                    else:
+                        grid_map_ground.add_point(x, y, z, timestamp)
 
+                # Retrieve height estimates.
                 ground_points = grid_map_ground.get_height_estimate()
                 obstacle_points = grid_map_obstacle.get_height_estimate()
-                
-                # Extract X, Y, Z values for ground points
+
+                # Filter points within a 15-unit radius.
+                vehicle_x, vehicle_y = position[0], position[1]
+                center = np.array([vehicle_x, vehicle_y])
+                radius = 15
+                ground_points = filter_points_by_radius(ground_points, center, radius)
+
+                # Extract X, Y, Z for ground points.
                 ground_x_vals = ground_points[:, 0]
                 ground_y_vals = ground_points[:, 1]
                 ground_z_vals = ground_points[:, 2]
 
-                obstacle_x_vals = obstacle_points[:, 0]
-                obstacle_y_vals = obstacle_points[:, 1]
-                obstacle_z_vals = obstacle_points[:, 2]
-
-                # Define grid resolution and edges based on ground data
-                grid_resolution = 0.1
-                x_edges = np.arange(min(ground_x_vals), max(ground_x_vals) + grid_resolution, grid_resolution)
-                y_edges = np.arange(min(ground_y_vals), max(ground_y_vals) + grid_resolution, grid_resolution)
-
-                # Create meshgrid for visualization (note: meshgrid returns Y,X order)
-                x_mid = (x_edges[:-1] + x_edges[1:]) / 2  # midpoints of X bins
-                y_mid = (y_edges[:-1] + y_edges[1:]) / 2  # midpoints of Y bins
-                X, Y = np.meshgrid(x_mid, y_mid)
-
-                # Initialize Z grid for ground points
+            
+                # Build the ground grid.
                 Z_ground = np.full((len(x_mid), len(y_mid)), np.nan)
                 for i in range(len(ground_x_vals)):
                     x_idx = np.digitize(ground_x_vals[i], x_edges) - 1
@@ -289,87 +335,159 @@ if __name__ == "__main__":
                     if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
                         Z_ground[x_idx, y_idx] = ground_z_vals[i]
 
+                # Calculate risk grids.
                 non_nan_indices = np.argwhere(~np.isnan(Z_ground))
-
-                # Calculate combined step and slope risk grids
-                step_risk_grid, slope_risk_grid = calculate_combined_risks(Z_ground, non_nan_indices,
-                                                                           max_height_diff=0.05,
-                                                                           max_slope_degrees=30.0,
-                                                                           radius=0.5)
-
+                step_risk_grid, slope_risk_grid = calculate_combined_risks(
+                    Z_ground, non_nan_indices, max_height_diff=0.05, max_slope_degrees=30.0, radius=0.5
+                )
                 combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
                 masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)
                 masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)
-
                 total_risk_grid = np.ma.mean([masked_step_risk, masked_slope_risk], axis=0).filled(np.nan)
 
-                # Mark obstacles in the risk grid as high risk
-                for i in range(len(obstacle_x_vals)):
-                    x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
-                    y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
-                    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-                        total_risk_grid[x_idx, y_idx] = 1.0
+                # Add obstacle data to risk grid.
+                if obstacle_points.size != 0:
+                    obstacle_points = filter_points_by_radius(obstacle_points, center, radius)
+                    obstacle_x_vals = obstacle_points[:, 0]
+                    obstacle_y_vals = obstacle_points[:, 1]
+                    for i in range(len(obstacle_x_vals)):
+                        x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
+                        y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
+                        if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
+                            total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
 
-                # Interpolate missing values in the risk grid
+                # Interpolate missing risk values.
                 interpolation_radius = 1.5
                 total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
-
-                # Mask NaN values for visualization purposes
                 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
+                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.8)
 
-                # Calculate CVaR for each cell in the risk grid
-                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid)
+                # filled the NaN values with 0.80
+                cvar_combined_risk_filled = np.pad(cvar_combined_risk, pad_width=2, mode='constant', constant_values=0.80)
+                cvar_combined_risk = cvar_combined_risk.filled(0.80)
 
-                # Define a custom colormap (gray to yellow to red)
+
+
+
+                # Optionally mask cells far from the vehicle.
+                distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
+                cvar_combined_risk[distance_from_vehicle.T > 15.0] = np.nan
+
+                # Convert vehicle position to grid indices.
+                start_idx = (np.digitize(vehicle_x, x_edges) - 1, np.digitize(vehicle_y, y_edges) - 1)
+                dest_idx = (np.digitize(destination_point[0], x_edges) - 1, np.digitize(destination_point[1], y_edges) - 1)
+                # Clamp destination indices within grid bounds.
+                dest_idx = (min(max(dest_idx[0], 0), len(x_mid) - 1), min(max(dest_idx[1], 0), len(y_mid) - 1))
+            
+                # Plan a path if the start cell is valid.
+                update_path = False
+                if np.isnan(cvar_combined_risk[start_idx[0], start_idx[1]]):
+                    path = None
+                else:
+                    dest_to_temp_dest = 0
+                    get_temp_dest_value = 0
+                    if temp_dest is not None:
+                        temp_start_point = (x_edges[start_idx[0]], y_edges[start_idx[1]])
+                        dest_to_temp_dest = np.linalg.norm(np.array(temp_dest) - np.array(temp_start_point))
+                        get_temp_dest_value = cvar_combined_risk[
+                            np.digitize(temp_dest[0], x_edges) - 1, np.digitize(temp_dest[1], y_edges) - 1
+                        ]
+                    if path is None or current_target_index >8 or get_temp_dest_value == 1:
+                        valid_indices = np.argwhere(~np.isnan(cvar_combined_risk))
+                        if valid_indices.size > 0:
+                            candidate_centers = np.column_stack((x_mid[valid_indices[:, 0]], y_mid[valid_indices[:, 1]]))
+                            candidate_distances = np.linalg.norm(candidate_centers - destination_point, axis=1)
+                            best_candidate = valid_indices[np.argmin(candidate_distances)]
+                            dest_idx = tuple(best_candidate)
+                            path = a_star_search(cvar_combined_risk, start_idx, dest_idx)
+                            temp_dest = (x_edges[dest_idx[0]], y_edges[dest_idx[1]])
+                            update_path = True
+                            current_target_index = 0
+                        else:
+                            path = None
+
+                # ---------------------------------------------------------------------
+                # Visualization: Plot the risk map and the computed A* path.
+                # ---------------------------------------------------------------------
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
-
                 ax.clear()
-                # Note: pcolormesh expects data in shape (ny, nx), so we transpose the risk grid for plotting.
-                c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
+                c = ax.pcolormesh(Y,X, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
                 if colorbar is None:
-                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0 = safe, 1 = risky)')
+                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=zero risk, 1=risky)')
                 else:
                     colorbar.update_normal(c)
-
                 ax.set_xlabel('X')
                 ax.set_ylabel('Y')
-                ax.set_title('Risk Visualization')
+                ax.set_title('Risk Visualization with A* Path and PID Control')
 
-                ###############################################
-                # A* Path Planning Integration
-                ###############################################
-                # Get the current vehicle position (world coordinates)
-                current_position, _ = lidar_test.get_vehicle_pose()
-                start_world = current_position[:2]  # Use only x and y
-                
-                # Convert start and final goal from world coordinates to grid indices.
-                start_idx = world_to_grid(start_world[0], start_world[1], x_edges, y_edges)
-                goal_idx = world_to_grid(final_goal_world[0], final_goal_world[1], x_edges, y_edges)
-                
-                # Run A* on the risk grid.
-                # Note: cvar_combined_risk is of shape (len(x_mid), len(y_mid)) where
-                # first dimension corresponds to x and second to y.
-                path = a_star_planning(cvar_combined_risk, start_idx, goal_idx, grid_resolution)
-                
-                if path is not None:
-                    # Convert grid indices back to world coordinates for plotting.
-                    path_world = []
-                    for (i, j) in path:
-                        # Using the grid edges, find the center of the cell.
-                        x_world = x_edges[i] + grid_resolution / 2
-                        y_world = y_edges[j] + grid_resolution / 2
-                        path_world.append((x_world, y_world))
-                    path_world = np.array(path_world)
+                # If no new path is computed, use the backup path.
+                if not update_path and temp_path is not None:
+                    path = temp_path.copy()
+                    for j in range(len(path)):
+                        path[j] = (np.digitize(path[j][0], x_edges) - 1, np.digitize(path[j][1], y_edges) - 1)
+
+                # If a path was found, overlay it.
+                if path:
+                    temp_path = path.copy()
+                    for i in range(len(temp_path)):
+                        temp_path[i] = (x_edges[temp_path[i][0]], y_edges[temp_path[i][1]])
+                    # Convert grid indices to world coordinates.
+                    raw_path = np.array([[x_mid[cell[0]], y_mid[cell[1]]] for cell in path])
+                    # Smooth the path.
+                    smoothed_path = smooth_path(raw_path, window_size=5)
+                    ax.plot(smoothed_path[:, 1], smoothed_path[:, 0],
+                            color="blue", linewidth=2, label="Smoothed A* Path")
                     
-                    # Plot the path on top of the risk map.
-                    ax.plot(path_world[:, 0], path_world[:, 1], color='cyan', linewidth=2, label='Planned Path')
-                    ax.legend()
+                    # ---------------------------------------------------------------------
+                    # PID Control: Follow the computed (smoothed) A* path.
+                    # ---------------------------------------------------------------------
+                    if current_target_index < len(smoothed_path):
+                        target_point = smoothed_path[current_target_index]
+                        distance_to_target = np.linalg.norm(np.array(target_point) - np.array([vehicle_x, vehicle_y]))
+                        # When close to the target waypoint, advance to the next.
+                        if distance_to_target < 2:
+                            current_target_index += 2
+                            current_target_index = min(current_target_index, len(smoothed_path) - 1)
+                            target_point = smoothed_path[current_target_index]
+                        # Compute desired heading toward the target.
+                        desired_heading = math.atan2(target_point[1] - vehicle_y,
+                                                     target_point[0] - vehicle_x)
+                        # Compute the current heading from the vehicle's rotation matrix.
+                        current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+                        heading_error = desired_heading - current_heading
+                        heading_error = (heading_error + math.pi) % (2 * math.pi) - math.pi
+
+                        # Compute steering using the PID controller.
+                        steering = steering_pid.compute(heading_error)
+                        steering = max(min(steering, 1), -1)
+                        # Compute throttle (forward control) based on projection of the error.
+                        dx = target_point[0] - vehicle_x
+                        dy = target_point[1] - vehicle_y
+                        forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
+                        throttle = forward_pid.compute(forward_error)
+                        throttle = max(min(throttle, 0.0275), 0.0)
+                        if abs(steering) > 0.75:
+                            throttle = 0
+                        # Set vehicle controls.
+                        lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
+                                                          lidar_test.vehicleName)
                 else:
-                    print("No path found from start to goal.")
+                    lidar_test.client.setCarControls(airsim.CarControls(throttle=0.0275, steering=0),
+                                                          lidar_test.vehicleName)
+                distance_last = np.linalg.norm(destination_point - np.array([vehicle_x, vehicle_y]))
+                if distance_last < 0.75:
+                    lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
+                    break
+                # Mark the start and destination.
+                ax.scatter(vehicle_y, vehicle_x, color="green", label="Start", zorder=5)
+                ax.scatter(destination_point[1], destination_point[0], color="red", label="Destination", zorder=5)
+                ax.legend()
 
                 plt.draw()
                 plt.pause(0.1)
+
     finally:
         plt.ioff()
         plt.show()
+        plt.close()

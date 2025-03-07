@@ -262,7 +262,7 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()
     plt.ion()
     colorbar = None
-    steering_pid = PIDController(kp=0.8462027727540303, ki=0.023914715286008515, kd=0.0939731107200599, dt=0.1)
+    steering_pid = PIDController(kp=0.8462027727540303, ki=0, kd=0.0939731107200599, dt=0.1)
     forward_pid  = PIDController(kp=0.5, ki=0.075, kd=0.05, dt=0.1)
     
     # Define a manual path (grid coordinates) and convert to world coordinates later.
