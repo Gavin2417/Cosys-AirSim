@@ -123,10 +123,11 @@ for i in range(len(ground_x_vals)):
 non_nan_indices = np.argwhere(~np.isnan(Z_ground))
 
 # Calculate the combined step and slope risk grids
-step_risk_grid, slope_risk_grid = calculate_combined_risks(Z_ground, non_nan_indices, max_height_diff=0.05, max_slope_degrees=30.0, radius=0.5)
+step_risk_grid, slope_risk_grid = calculate_combined_risks(Z_ground, non_nan_indices, max_height_diff=0.04, max_slope_degrees=30.0, radius=0.5)
 
-# Merge step and slope risk grids to get the total risk grid
-total_risk_grid = np.nanmean([step_risk_grid, slope_risk_grid], axis=0)
+# Merge step and slope risk grids to get the total risk grid by add
+
+total_risk_grid = np.nanadd
 
 # Add obstacle points to the risk grid
 for i in range(len(obstacle_x_vals)):

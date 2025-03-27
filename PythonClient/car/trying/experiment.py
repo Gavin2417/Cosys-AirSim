@@ -8,7 +8,7 @@ import os
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from scipy.stats import binned_statistic_2d
-from function2 import calculate_combined_risks, compute_cvar_cellwise
+from function4 import calculate_combined_risks, compute_cvar_cellwise
 from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma
 from scipy.spatial import cKDTree
@@ -58,8 +58,11 @@ def filter_points_by_radius(points, center, radius):
 def is_valid(row, col, grid):
     return 0 <= row < grid.shape[0] and 0 <= col < grid.shape[1]
 
-def is_unblocked(grid, row, col):
-    return (not np.isnan(grid[row, col])) and (grid[row, col] < 1.0)
+def is_unblocked(grid, row, col, threshold):
+    """
+    Returns True if the cell at (row, col) is valid and its risk value is below the given threshold.
+    """
+    return (not np.isnan(grid[row, col])) and (grid[row, col] < threshold)
 
 def calculate_h_value(row, col, dest):
     return np.sqrt((row - dest[0]) ** 2 + (col - dest[1]) ** 2)
@@ -78,6 +81,11 @@ def trace_path(cell_details, dest):
 
 def a_star_search(risk_grid, start_idx, dest_idx):
     rows, cols = risk_grid.shape
+    # Compute the maximum risk ignoring NaNs, and then set threshold to 80% of that value.
+    max_risk = np.nanmax(risk_grid)
+    # Fallback to a default value if the risk grid is all NaN (unlikely in normal operation)
+    threshold = 0.8 * max_risk if not np.isnan(max_risk) else 6.0
+
     open_list = []
     heapq.heappush(open_list, (0.0, start_idx))
     g_scores = np.full((rows, cols), float('inf'))
@@ -96,14 +104,15 @@ def a_star_search(risk_grid, start_idx, dest_idx):
         current_row, current_col = current
         for direction in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             neighbor = (current_row + direction[0], current_col + direction[1])
-            if is_valid(neighbor[0], neighbor[1], risk_grid) and is_unblocked(risk_grid, neighbor[0], neighbor[1]):
+            if is_valid(neighbor[0], neighbor[1], risk_grid) and \
+               is_unblocked(risk_grid, neighbor[0], neighbor[1], threshold):
                 tentative_g_score = g_scores[current] + risk_grid[neighbor]
                 if tentative_g_score < g_scores[neighbor]:
                     g_scores[neighbor] = tentative_g_score
                     f_scores[neighbor] = tentative_g_score + calculate_h_value(neighbor[0], neighbor[1], dest_idx)
                     heapq.heappush(open_list, (f_scores[neighbor], neighbor))
                     cell_details[neighbor] = current
-    return None  # No path found
+    return None  # N
 
 # ---------------------------------------------------------------------------
 # Smoothing Function: Smoothens a path using a moving average filter.
@@ -277,7 +286,7 @@ if __name__ == "__main__":
     margin = 4
     position, rotation_matrix = lidar_test.get_vehicle_pose()
     start_point = np.array([position[0], position[1]])  # vehicle's current position
-    destination_point = np.array([15, -6]) 
+    destination_point = np.array([-1, -10]) 
     min_x = min(start_point[0], destination_point[0]) - margin
     max_x = max(start_point[0], destination_point[0]) + margin
     min_y = min(start_point[1], destination_point[1]) - margin
@@ -338,12 +347,19 @@ if __name__ == "__main__":
                 # Calculate risk grids.
                 non_nan_indices = np.argwhere(~np.isnan(Z_ground))
                 step_risk_grid, slope_risk_grid = calculate_combined_risks(
-                    Z_ground, non_nan_indices, max_height_diff=0.05, max_slope_degrees=30.0, radius=0.5
+                    Z_ground, non_nan_indices, max_height_diff=0.035, max_slope_degrees=30.0, radius=0.5
                 )
                 combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
-                masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)
-                masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)
-                total_risk_grid = np.ma.mean([masked_step_risk, masked_slope_risk], axis=0).filled(np.nan)
+                masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)*2.0
+                masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)*2.0
+                
+                # Calculate the sum for non-NaN elements
+                sum_grid = np.ma.filled(masked_step_risk, 0) + np.ma.filled(masked_slope_risk, 0)
+                # Create a mask: if both step and slope risks are NaN, then the result should be NaN
+                both_nan_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
+                # Use np.where to set cells where both risks are NaN to NaN, otherwise use the computed sum
+                total_risk_grid = np.where(both_nan_mask, np.nan, sum_grid)
+
 
                 # Add obstacle data to risk grid.
                 if obstacle_points.size != 0:
@@ -354,19 +370,21 @@ if __name__ == "__main__":
                         x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
                         y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
                         if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-                            total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
-
+                            total_risk_grid[x_idx, y_idx] += 2.0  # Mark obstacles as high risk
+                # Compute the maximum risk value, ignoring NaNs
+                max_risk = np.nanmax(total_risk_grid)
+                threshold = 0.2 * max_risk
+                mask = total_risk_grid > threshold
+                total_risk_grid[mask] = np.exp(total_risk_grid[mask])
                 # Interpolate missing risk values.
                 interpolation_radius = 1.5
                 total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
                 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.99)
+                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.80)
 
                 # filled the NaN values with 0.80
                 cvar_combined_risk_filled = np.pad(cvar_combined_risk, pad_width=2, mode='constant', constant_values=0.80)
                 cvar_combined_risk = cvar_combined_risk.filled(0.50)
-
-
 
 
                 # Optionally mask cells far from the vehicle.
@@ -393,6 +411,7 @@ if __name__ == "__main__":
                             np.digitize(temp_dest[0], x_edges) - 1, np.digitize(temp_dest[1], y_edges) - 1
                         ]
                     if path is None or current_target_index >8 or get_temp_dest_value == 1:
+    
                         valid_indices = np.argwhere(~np.isnan(cvar_combined_risk))
                         if valid_indices.size > 0:
                             candidate_centers = np.column_stack((x_mid[valid_indices[:, 0]], y_mid[valid_indices[:, 1]]))
@@ -466,7 +485,7 @@ if __name__ == "__main__":
                         dy = target_point[1] - vehicle_y
                         forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
                         throttle = forward_pid.compute(forward_error)
-                        throttle = max(min(throttle, 0.8), 0.0)
+                        throttle = max(min(throttle, 0.05), 0.0)
                         if abs(steering) > 0.75:
                             throttle = 0
                         # Set vehicle controls.

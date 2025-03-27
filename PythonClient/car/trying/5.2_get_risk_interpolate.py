@@ -8,7 +8,7 @@ import os
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from scipy.stats import binned_statistic_2d
-from function2 import calculate_combined_risks,compute_cvar_cellwise
+from function3 import calculate_combined_risks,compute_cvar_cellwise
 from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma
 from scipy.spatial import cKDTree
@@ -242,35 +242,35 @@ if __name__ == "__main__":
                 # Calculate the combined step and slope risk grids
                 step_risk_grid, slope_risk_grid = calculate_combined_risks(Z_ground, non_nan_indices, max_height_diff=0.05, max_slope_degrees=30.0, radius=0.5)
 
-                combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
-                masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)
-                masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)
+                # combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
+                # masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)
+                # masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)
 
-                # Calculate the mean for non-NaN elements
-                total_risk_grid = np.ma.mean([masked_step_risk, masked_slope_risk], axis=0).filled(np.nan)
+                # # Calculate the mean for non-NaN elements
+                # total_risk_grid = np.ma.mean([masked_step_risk, masked_slope_risk], axis=0).filled(np.nan)
 
-                # Add obstacle points to the risk grid
-                for i in range(len(obstacle_x_vals)):
-                    x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
-                    y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
-                    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-                        total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
+                # # Add obstacle points to the risk grid
+                # for i in range(len(obstacle_x_vals)):
+                #     x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
+                #     y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
+                #     if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
+                #         total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
                 
-                # Interpolate missing (NaN) values in the risk grid
-                interpolation_radius = 1.5  # Set the interpolation radius
-                total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
+                # # Interpolate missing (NaN) values in the risk grid
+                # interpolation_radius = 1.5  # Set the interpolation radius
+                # total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
 
-                # Mask NaN values in total_risk_grid for transparency
-                masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
+                # # Mask NaN values in total_risk_grid for transparency
+                # masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
 
-                # Calculate CVaR for each grid cell
-                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid)
+                # # Calculate CVaR for each grid cell
+                # cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid)
 
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
 
                 ax.clear()
-                c = ax.pcolormesh(X, Y, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
+                c = ax.pcolormesh(X, Y, slope_risk_grid.T, shading='auto', cmap=cmap, alpha=0.7)
 
                 if colorbar is None:
                     colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=zero risk, 1= risky)')

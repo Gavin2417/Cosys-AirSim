@@ -6,7 +6,7 @@ from scipy.spatial import cKDTree
 import numpy.ma as ma
 from scipy.stats import norm
 
-def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.5, max_slope_degrees=30.0, radius=0.3):
+def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.4, max_slope_degrees=30.0, radius=0.3):
     """
     Calculate step and slope risks for a grid based on height differences and gradients.
     """
@@ -71,6 +71,7 @@ def compute_cvar_cellwise(risk_grid, alpha=0.20):
     """
     # Mask NaN values to avoid unnecessary computation
     valid_mask = ~np.isnan(risk_grid)
+    
     mu = np.zeros_like(risk_grid)
     mu[valid_mask] = risk_grid[valid_mask]
     
@@ -79,6 +80,6 @@ def compute_cvar_cellwise(risk_grid, alpha=0.20):
     cvar_grid = np.full_like(risk_grid, np.nan)  # Start with a grid of NaNs
 
     # Compute CVaR only for valid cells
-    cvar_grid[valid_mask] = np.clip(mu[valid_mask] + sigma * (phi / (1 - alpha)), 0, 1)
-
+    cvar_grid[valid_mask] =np.clip(mu[valid_mask] + sigma * (phi / (1 - alpha)),0, 40)
+    
     return cvar_grid
