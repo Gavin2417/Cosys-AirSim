@@ -1,4 +1,3 @@
-# import setup_path
 import cosysairsim as airsim
 import numpy as np
 import open3d as o3d
@@ -13,23 +12,89 @@ from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma
 from scipy.spatial import cKDTree
 import heapq
-import math 
+import math  # For trigonometry
+
+# ---------------------------------------------------------------------------
+# Adaptive Forward PID Controller with Dynamic Gain Scaling and Rate Limiting
+# ---------------------------------------------------------------------------
+class AdaptivePIDController:
+    def __init__(self, kp, ki, kd, dt=0.1):
+        self.kp_base = kp
+        self.ki_base = ki
+        self.kd_base = kd
+        self.dt = dt
+        self.integral = 0.0
+        self.prev_error = 0.0
+
+    def compute(self, error, current_speed, distance_to_target, heading_error, throttle_prev, max_throttle=1):
+        # Start with base gains
+        kp_eff = self.kp_base
+        ki_eff = self.ki_base
+        kd_eff = self.kd_base
+
+        # Define thresholds for dynamic scaling
+        HIGH_SPEED_THRESH = 10.0  # m/s threshold for high speed
+        NEAR_DIST_THRESH = 2.0      # near target threshold (meters)
+        HEADING_ERR_THRESH = 0.5    # radians threshold
+
+        # Scale gains down if the vehicle is at high speed
+        if current_speed > HIGH_SPEED_THRESH:
+            kp_eff *= 0.7
+            ki_eff *= 0.5
+            kd_eff *= 1.2
+
+        # When approaching the target, reduce gains for gentler throttle changes
+        if distance_to_target < NEAR_DIST_THRESH:
+            kp_eff *= 0.5
+            ki_eff *= 0.5
+
+        # If the heading error is high, reduce throttle aggressiveness
+        if abs(heading_error) > HEADING_ERR_THRESH:
+            kp_eff *= 0.5
+
+        # Compute the integral and derivative terms
+        self.integral += error * self.dt
+        derivative = (error - self.prev_error) / self.dt
+        output = kp_eff * error + ki_eff * self.integral + kd_eff * derivative
+        self.prev_error = error
+
+        # Rate limiting: prevent abrupt throttle changes
+        rate_limit = 0.005  # maximum throttle change per time step
+        delta = output - throttle_prev
+        if delta > rate_limit:
+            output = throttle_prev + rate_limit
+        elif delta < -rate_limit:
+            output = throttle_prev - rate_limit
+
+        # Clamp the output to allowed throttle values
+        output = max(min(output, max_throttle), 0.0)
+        return output
+
+# ---------------------------------------------------------------------------
+# Simple Moving Average Filter for Error Smoothing
+# ---------------------------------------------------------------------------
+class ErrorFilter:
+    def __init__(self, window_size=5):
+        self.window_size = window_size
+        self.buffer = []
+
+    def add(self, error):
+        self.buffer.append(error)
+        if len(self.buffer) > self.window_size:
+            self.buffer.pop(0)
+        return sum(self.buffer) / len(self.buffer)
+
 # ---------------------------------------------------------------------------
 # Interpolation: Fill in missing (NaN) grid cells using nearby valid cells.
 # ---------------------------------------------------------------------------
 def interpolate_in_radius(grid, radius):
-    """
-    Interpolates NaN values in a grid using valid points within a specified radius.
-    """
     valid_points = ~np.isnan(grid)
     valid_coords = np.column_stack(np.where(valid_points))
     valid_values = grid[valid_points]
 
-    # Create KDTree for efficient neighbor search
     tree = cKDTree(valid_coords)
     nan_coords = np.column_stack(np.where(np.isnan(grid)))
 
-    # Iterate through each NaN point
     for idx, coord in enumerate(nan_coords):
         neighbors = tree.query_ball_point(coord, radius)
         if neighbors:
@@ -39,7 +104,7 @@ def interpolate_in_radius(grid, radius):
                 neighbor_coord = valid_coords[neighbor_idx]
                 value = valid_values[neighbor_idx]
                 distance = np.linalg.norm(coord - neighbor_coord)
-                weight = 1 / (distance + 1e-6)  # Avoid division by zero
+                weight = 1 / (distance + 1e-6)
                 weights.append(weight)
                 weighted_values.append(weight * value)
             grid[coord[0], coord[1]] = np.sum(weighted_values) / np.sum(weights)
@@ -103,36 +168,21 @@ def a_star_search(risk_grid, start_idx, dest_idx):
                     f_scores[neighbor] = tentative_g_score + calculate_h_value(neighbor[0], neighbor[1], dest_idx)
                     heapq.heappush(open_list, (f_scores[neighbor], neighbor))
                     cell_details[neighbor] = current
-    return None  # No path found
+    return None
 
 # ---------------------------------------------------------------------------
 # Smoothing Function: Smoothens a path using a moving average filter.
 # ---------------------------------------------------------------------------
 def smooth_path(path, window_size=5):
-    """
-    Smooths a sequence of (x,y) points using a simple moving average filter.
-    
-    Parameters:
-        path (array-like): An array of points [[x1, y1], [x2, y2], ...].
-        window_size (int): The number of points to average over (should be odd).
-    
-    Returns:
-        np.ndarray: Smoothed path as an array of points.
-    """
     path = np.array(path)
     n_points = len(path)
     if n_points < window_size:
-        # Not enough points to smooth; return original path.
         return path
-
-    # If window_size is even, increment it by 1 to ensure symmetry.
     if window_size % 2 == 0:
         window_size += 1
-
     half_window = window_size // 2
     smoothed = []
     for i in range(n_points):
-        # Define window bounds (handling the boundaries)
         start_idx = max(0, i - half_window)
         end_idx = min(n_points, i + half_window + 1)
         window_average = np.mean(path[start_idx:end_idx], axis=0)
@@ -144,7 +194,6 @@ def smooth_path(path, window_size=5):
 # ---------------------------------------------------------------------------
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
-        # Connect to the AirSim simulator
         self.client = airsim.CarClient()
         self.client.confirmConnection()
         self.vehicleName = vehicle_name
@@ -152,7 +201,6 @@ class lidarTest:
         self.lastlidarTimeStamp = 0
 
     def get_data(self, gpulidar):
-        # Get lidar data from AirSim
         if gpulidar:
             lidarData = self.client.getGPULidarData(self.lidarName, self.vehicleName)
         else:
@@ -163,18 +211,16 @@ class lidarTest:
                 return None, None
             else:
                 self.lastlidarTimeStamp = lidarData.time_stamp
-                # Process lidar point cloud data
                 points = np.array(lidarData.point_cloud, dtype=np.dtype('f4'))
                 num_dims = 5 if gpulidar else 3
                 points = np.reshape(points, (int(points.shape[0] / num_dims), num_dims))
                 if not gpulidar:
-                    points = points * np.array([1, -1, 1])  # Adjust for AirSim coordinates
-                return points, lidarData.time_stamp  # Return timestamp with data
+                    points = points * np.array([1, -1, 1])
+                return points, lidarData.time_stamp
         else:
             return None, None
 
     def get_vehicle_pose(self):
-        # Get the pose (position and orientation) of the vehicle in world coordinates
         vehicle_pose = self.client.simGetVehiclePose()
         position = vehicle_pose.position
         orientation = vehicle_pose.orientation
@@ -193,9 +239,8 @@ class lidarTest:
         return rotation_matrix
 
     def transform_to_world(self, points, position, rotation_matrix):
-        # Apply rotation first, then apply translation (position)
-        points_rotated = np.dot(points, rotation_matrix.T)  # Rotate points
-        points_in_world = points_rotated + position  # Translate points to world coordinates
+        points_rotated = np.dot(points, rotation_matrix.T)
+        points_in_world = points_rotated + position
         return points_in_world
 
 # ---------------------------------------------------------------------------
@@ -224,8 +269,9 @@ class GridMap:
             x, y = cell
             estimated_points.append([x * self.resolution, y * self.resolution, avg_z])
         return np.array(estimated_points)
+
 # ---------------------------------------------------------------------------
-# PID Controller for Steering and Forward Motion
+# PID Controller for Steering (remains unchanged)
 # ---------------------------------------------------------------------------
 class PIDController:
     def __init__(self, kp, ki, kd, dt=0.1):
@@ -237,23 +283,18 @@ class PIDController:
         self.prev_error = 0.0
 
     def compute(self, error):
-        self.integral += (error * self.dt)
+        self.integral += error * self.dt
         derivative = (error - self.prev_error) / self.dt
         output = self.kp * error + self.ki * self.integral + self.kd * derivative
         self.prev_error = error
         return output
-    
-# ---------------------------------------------------------------------------
-# Main Loop
-# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
-    # Initialize Lidar test and grid maps.
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
     grid_map_ground = GridMap(resolution=0.1)
     grid_map_obstacle = GridMap(resolution=0.1)
 
-    # Initialize ground segmentation object with default or config file.
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
     config_path = f"{BASE_DIR}/../assets/config.toml"
     if not os.path.exists(config_path):
@@ -262,46 +303,48 @@ if __name__ == "__main__":
     else:
         groundseg = ground_seg(config_path)
 
-    # Initialize visualizer.
-    fig, ax = plt.subplots()  # No 'projection=3d'
-    plt.ion()  # Enable interactive mode
+    fig, ax = plt.subplots()
+    plt.ion()
     colorbar = None
-    path = None
-    temp_dest = None
-    temp_path = None
-    steering_pid = PIDController(kp=0.8462027727540303, ki=0.023914715286008515, kd=0.0939731107200599, dt=0.1)
-    forward_pid  = PIDController(kp=0.4, ki=0.05, kd=0.10, dt=0.1)
+    steering_pid = PIDController(kp=0.8462027727540303, ki=0, kd=0.0939731107200599, dt=0.1)
+    forward_pid = AdaptivePIDController(kp=0.4, ki=0.05, kd=0.10, dt=0.1)
+    error_filter = ErrorFilter(window_size=5)
+    forward_pid_1  = PIDController(kp=0.5, ki=0.075, kd=0.05, dt=0.1)
+    manual_path = [
+        (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0),
+        (6, 0), (7, 0), (8, 0), (8, -1), (8, -2), (8, -3), (8, -4), (8, -5),
+        (9, -5), (10, -5), (10, -6), (11, -6), (10, -6), (9, -6), (8, -6), (7, -6),
+        (6, -6), (5, -6), (4, -6), (3, -6), (2, -6), (1, -6), (0, -6), (-1, -6),
+    ]
     current_target_index = 0
-    # Define grid resolution and edges.
-    grid_resolution = 0.1
-    margin = 4
-    position, rotation_matrix = lidar_test.get_vehicle_pose()
-    start_point = np.array([position[0], position[1]])  # vehicle's current position
-    destination_point = np.array([15, -6]) 
-    min_x = min(start_point[0], destination_point[0]) - margin
-    max_x = max(start_point[0], destination_point[0]) + margin
-    min_y = min(start_point[1], destination_point[1]) - margin
-    max_y = max(start_point[1], destination_point[1]) + margin
 
-    # Build grid edges based on these boundaries.
-    x_edges = np.arange(min_x, max_x + grid_resolution, grid_resolution)
-    y_edges = np.arange(min_y, max_y + grid_resolution, grid_resolution)
-    x_mid = (x_edges[:-1] + x_edges[1:]) / 2
-    y_mid = (y_edges[:-1] + y_edges[1:]) / 2
-    X, Y = np.meshgrid(x_mid, y_mid)
+    error_list = []
+    iteration_list = []
+    iteration = 0
+    prev_time = time.time()
+    throttle_prev = 0.0
+    prev_position = None
+
     try:
         while True:
+            current_time = time.time()
+            dt = current_time - prev_time
+            prev_time = current_time
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
             if point_cloud_data is not None:
                 points = np.array(point_cloud_data[:, :3], dtype=np.float64)
                 points = points[np.linalg.norm(points, axis=1) > 0.6]
 
                 position, rotation_matrix = lidar_test.get_vehicle_pose()
+                if prev_position is None:
+                    prev_position = position
+                current_speed = np.linalg.norm(position - prev_position) / dt
+                prev_position = position
+
                 points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
-                points_world[:, 2] = -points_world[:, 2]  # Adjust Z if needed
+                points_world[:, 2] = -points_world[:, 2]
                 label = np.array(groundseg.run(points_world))
 
-                # Populate grid maps.
                 for i, point in enumerate(points_world):
                     x, y, z = point
                     if label[i] == 1:
@@ -311,23 +354,33 @@ if __name__ == "__main__":
                     else:
                         grid_map_ground.add_point(x, y, z, timestamp)
 
-                # Retrieve height estimates.
                 ground_points = grid_map_ground.get_height_estimate()
                 obstacle_points = grid_map_obstacle.get_height_estimate()
 
-                # Filter points within a 15-unit radius.
                 vehicle_x, vehicle_y = position[0], position[1]
                 center = np.array([vehicle_x, vehicle_y])
                 radius = 15
                 ground_points = filter_points_by_radius(ground_points, center, radius)
 
-                # Extract X, Y, Z for ground points.
                 ground_x_vals = ground_points[:, 0]
                 ground_y_vals = ground_points[:, 1]
                 ground_z_vals = ground_points[:, 2]
 
-            
-                # Build the ground grid.
+                grid_resolution = 0.1
+                margin = 2.5
+                start_world = np.array([-1, 0])
+                destination_point = np.array([14, -6])
+                min_x = min(start_world[0], destination_point[0]) - margin
+                max_x = max(start_world[0], destination_point[0]) + margin
+                min_y = min(start_world[1], destination_point[1]) - margin
+                max_y = max(start_world[1], destination_point[1]) + margin
+
+                x_edges = np.arange(min_x, max_x + grid_resolution, grid_resolution)
+                y_edges = np.arange(min_y, max_y + grid_resolution, grid_resolution)
+                x_mid = (x_edges[:-1] + x_edges[1:]) / 2
+                y_mid = (y_edges[:-1] + y_edges[1:]) / 2
+                X, Y = np.meshgrid(x_mid, y_mid)
+
                 Z_ground = np.full((len(x_mid), len(y_mid)), np.nan)
                 for i in range(len(ground_x_vals)):
                     x_idx = np.digitize(ground_x_vals[i], x_edges) - 1
@@ -335,7 +388,6 @@ if __name__ == "__main__":
                     if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
                         Z_ground[x_idx, y_idx] = ground_z_vals[i]
 
-                # Calculate risk grids.
                 non_nan_indices = np.argwhere(~np.isnan(Z_ground))
                 step_risk_grid, slope_risk_grid = calculate_combined_risks(
                     Z_ground, non_nan_indices, max_height_diff=0.05, max_slope_degrees=30.0, radius=0.5
@@ -345,7 +397,6 @@ if __name__ == "__main__":
                 masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)
                 total_risk_grid = np.ma.mean([masked_step_risk, masked_slope_risk], axis=0).filled(np.nan)
 
-                # Add obstacle data to risk grid.
                 if obstacle_points.size != 0:
                     obstacle_points = filter_points_by_radius(obstacle_points, center, radius)
                     obstacle_x_vals = obstacle_points[:, 0]
@@ -354,140 +405,108 @@ if __name__ == "__main__":
                         x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
                         y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
                         if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-                            total_risk_grid[x_idx, y_idx] = 1.0  # Mark obstacles as high risk
+                            total_risk_grid[x_idx, y_idx] = 1.0
 
-                # Interpolate missing risk values.
                 interpolation_radius = 1.5
                 total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
                 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.99)
+                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.8)
 
-                # filled the NaN values with 0.80
-                cvar_combined_risk_filled = np.pad(cvar_combined_risk, pad_width=2, mode='constant', constant_values=0.80)
-                cvar_combined_risk = cvar_combined_risk.filled(0.50)
-
-
-
-
-                # Optionally mask cells far from the vehicle.
                 distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
-                cvar_combined_risk[distance_from_vehicle.T > 15.0] = np.nan
+                cvar_combined_risk[distance_from_vehicle.T > 13.0] = np.nan
 
-                # Convert vehicle position to grid indices.
-                start_idx = (np.digitize(vehicle_x, x_edges) - 1, np.digitize(vehicle_y, y_edges) - 1)
-                dest_idx = (np.digitize(destination_point[0], x_edges) - 1, np.digitize(destination_point[1], y_edges) - 1)
-                # Clamp destination indices within grid bounds.
-                dest_idx = (min(max(dest_idx[0], 0), len(x_mid) - 1), min(max(dest_idx[1], 0), len(y_mid) - 1))
-            
-                # Plan a path if the start cell is valid.
-                update_path = False
-                if np.isnan(cvar_combined_risk[start_idx[0], start_idx[1]]):
-                    path = None
-                else:
-                    dest_to_temp_dest = 0
-                    get_temp_dest_value = 0
-                    if temp_dest is not None:
-                        temp_start_point = (x_edges[start_idx[0]], y_edges[start_idx[1]])
-                        dest_to_temp_dest = np.linalg.norm(np.array(temp_dest) - np.array(temp_start_point))
-                        get_temp_dest_value = cvar_combined_risk[
-                            np.digitize(temp_dest[0], x_edges) - 1, np.digitize(temp_dest[1], y_edges) - 1
-                        ]
-                    if path is None or current_target_index >8 or get_temp_dest_value == 1:
-                        valid_indices = np.argwhere(~np.isnan(cvar_combined_risk))
-                        if valid_indices.size > 0:
-                            candidate_centers = np.column_stack((x_mid[valid_indices[:, 0]], y_mid[valid_indices[:, 1]]))
-                            candidate_distances = np.linalg.norm(candidate_centers - destination_point, axis=1)
-                            best_candidate = valid_indices[np.argmin(candidate_distances)]
-                            dest_idx = tuple(best_candidate)
-                            path = a_star_search(cvar_combined_risk, start_idx, dest_idx)
-                            temp_dest = (x_edges[dest_idx[0]], y_edges[dest_idx[1]])
-                            update_path = True
-                            current_target_index = 0
-                        else:
-                            path = None
-
-                # ---------------------------------------------------------------------
-                # Visualization: Plot the risk map and the computed A* path.
-                # ---------------------------------------------------------------------
                 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
                 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
                 ax.clear()
-                c = ax.pcolormesh(Y,X, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
+                c = ax.pcolormesh(Y, X, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
                 if colorbar is None:
-                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=zero risk, 1=risky)')
+                    colorbar = fig.colorbar(c, ax=ax, label='Risk Value (0=low, 1=high)')
                 else:
                     colorbar.update_normal(c)
                 ax.set_xlabel('X')
                 ax.set_ylabel('Y')
-                ax.set_title('Risk Visualization with A* Path and PID Control')
+                ax.set_title('Risk Visualization with Manual Path and PID Control')
 
-                # If no new path is computed, use the backup path.
-                if not update_path and temp_path is not None:
-                    path = temp_path.copy()
-                    for j in range(len(path)):
-                        path[j] = (np.digitize(path[j][0], x_edges) - 1, np.digitize(path[j][1], y_edges) - 1)
-
-                # If a path was found, overlay it.
-                if path:
-                    temp_path = path.copy()
-                    for i in range(len(temp_path)):
-                        temp_path[i] = (x_edges[temp_path[i][0]], y_edges[temp_path[i][1]])
-                    # Convert grid indices to world coordinates.
-                    raw_path = np.array([[x_mid[cell[0]], y_mid[cell[1]]] for cell in path])
-                    # Smooth the path.
-                    smoothed_path = smooth_path(raw_path, window_size=5)
-                    ax.plot(smoothed_path[:, 1], smoothed_path[:, 0],
-                            color="blue", linewidth=2, label="Smoothed A* Path")
-                    
-                    # ---------------------------------------------------------------------
-                    # PID Control: Follow the computed (smoothed) A* path.
-                    # ---------------------------------------------------------------------
-                    if current_target_index < len(smoothed_path):
-                        target_point = smoothed_path[current_target_index]
-                        distance_to_target = np.linalg.norm(np.array(target_point) - np.array([vehicle_x, vehicle_y]))
-                        # When close to the target waypoint, advance to the next.
-                        if distance_to_target < 2:
-                            current_target_index += 2
-                            current_target_index = min(current_target_index, len(smoothed_path) - 1)
-                            target_point = smoothed_path[current_target_index]
-                        # Compute desired heading toward the target.
-                        desired_heading = math.atan2(target_point[1] - vehicle_y,
-                                                     target_point[0] - vehicle_x)
-                        # Compute the current heading from the vehicle's rotation matrix.
-                        current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
-                        heading_error = desired_heading - current_heading
-                        heading_error = (heading_error + math.pi) % (2 * math.pi) - math.pi
-
-                        # Compute steering using the PID controller.
-                        steering = steering_pid.compute(heading_error)
-                        steering = max(min(steering, 1), -1)
-                        # Compute throttle (forward control) based on projection of the error.
-                        dx = target_point[0] - vehicle_x
-                        dy = target_point[1] - vehicle_y
-                        forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
-                        throttle = forward_pid.compute(forward_error)
-                        throttle = max(min(throttle, 0.8), 0.0)
-                        if abs(steering) > 0.75:
-                            throttle = 0
-                        # Set vehicle controls.
-                        lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
-                                                          lidar_test.vehicleName)
-                else:
-                    lidar_test.client.setCarControls(airsim.CarControls(throttle=0.0275, steering=0),
-                                                          lidar_test.vehicleName)
-                distance_last = np.linalg.norm(destination_point - np.array([vehicle_x, vehicle_y]))
-                if distance_last < 0.75:
-                    lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
-                    break
-                # Mark the start and destination.
+                temp_i = []
+                for pt in manual_path:
+                    x_idx = np.digitize(pt[0], x_edges) - 1
+                    y_idx = np.digitize(pt[1], y_edges) - 1
+                    x_idx = np.clip(x_idx, 0, len(x_mid) - 1)
+                    y_idx = np.clip(y_idx, 0, len(y_mid) - 1)
+                    temp_i.append((x_idx, y_idx))
+                manual_path_world = np.array([[x_mid[x_idx], y_mid[y_idx]] for x_idx, y_idx in temp_i])
+                smoothed_manual_path = smooth_path(manual_path_world, window_size=5)
+                
+                ax.plot(smoothed_manual_path[:, 1], smoothed_manual_path[:, 0],
+                        color="magenta", linestyle="--", linewidth=2, label="Manual Path")
                 ax.scatter(vehicle_y, vehicle_x, color="green", label="Start", zorder=5)
                 ax.scatter(destination_point[1], destination_point[0], color="red", label="Destination", zorder=5)
                 ax.legend()
 
+                # -------------------------------
+                # PID Control for Following the Manual Path
+                # -------------------------------
+                if current_target_index < len(smoothed_manual_path):
+                    target_point = smoothed_manual_path[current_target_index]
+                    distance_to_target = np.linalg.norm(np.array(target_point) - np.array([vehicle_x, vehicle_y]))
+                    if distance_to_target < 1.5:
+                        current_target_index += 2
+                        current_target_index = min(current_target_index, len(smoothed_manual_path) - 1)
+                        target_point = smoothed_manual_path[current_target_index]
+                    desired_heading = math.atan2(target_point[1] - vehicle_y,
+                                                 target_point[0] - vehicle_x)
+                    current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+                    heading_error = desired_heading - current_heading
+                    heading_error = (heading_error + math.pi) % (2 * math.pi) - math.pi
+
+                    steering = steering_pid.compute(heading_error)
+                    steering = max(min(steering, 1), -1)
+                    
+                    dx = target_point[0] - vehicle_x
+                    dy = target_point[1] - vehicle_y
+                    raw_forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
+                    
+                    # --- NEW: Scale the forward error to avoid saturating the PID ---
+                    scale_factor = 15.0  # adjust based on expected error magnitude
+                    scaled_forward_error = raw_forward_error / scale_factor
+                    filtered_forward_error = error_filter.add(scaled_forward_error)
+                    
+                    # Compute throttle command using the adaptive forward PID controller
+                    throttle = forward_pid.compute(filtered_forward_error, current_speed,
+                                                   distance_to_target, heading_error, throttle_prev)
+                    throttle_prev = throttle
+                    
+                    if abs(steering) > 0.7:
+                        throttle = 0
+                    
+                    lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
+                                                      lidar_test.vehicleName)
+                
+                vehicle_pos = np.array([vehicle_x, vehicle_y])
+                path_distances = np.linalg.norm(smoothed_manual_path - vehicle_pos, axis=1)
+                total_error = np.min(path_distances)
+                error_list.append(total_error)
+                iteration_list.append(iteration)
+                iteration += 1
+                
                 plt.draw()
                 plt.pause(0.1)
-
+            
+            distance_last = np.linalg.norm(np.array(smoothed_manual_path[-1]) - np.array([vehicle_x, vehicle_y]))
+            if distance_last < 1:
+                lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
+                break
+        print("total iterations", iteration)       
     finally:
         plt.ioff()
         plt.show()
         plt.close()
+
+    plt.figure()
+    plt.plot(iteration_list, error_list, label='Path Tracking Error')
+    plt.xlabel('Iteration')
+    plt.ylabel('Error (m)')
+    plt.title('Path Tracking Error Over Time')
+    plt.legend()
+    plt.show()
+    print("total error", sum(error_list))
