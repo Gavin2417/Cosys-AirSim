@@ -8,6 +8,8 @@ import os
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from scipy.stats import binned_statistic_2d
+from scipy.ndimage import gaussian_filter
+from scipy.ndimage import binary_dilation, generate_binary_structure
 from function4 import calculate_combined_risks, compute_cvar_cellwise
 from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma
@@ -251,7 +253,29 @@ class PIDController:
         output = self.kp * error + self.ki * self.integral + self.kd * derivative
         self.prev_error = error
         return output
+from scipy.ndimage import distance_transform_edt
+def fade_with_distance_transform(risk_grid, high_threshold=0.4, fade_scale=4.0, sigma=5.0):
+    """
+    Increases risk near cells above (high_threshold * max_risk) using a distance transform.
+    fade_scale: peak risk to assign at distance=0
+    sigma: controls how quickly the risk decays with distance
+    """
+    grid_max = np.nanmax(risk_grid)
+    threshold_val = high_threshold * grid_max
     
+    # 1. Identify "high risk" cells
+    high_mask = (risk_grid > threshold_val)
+    
+    # 2. Compute distance to nearest high-risk cell for each free cell
+    dist_map = distance_transform_edt(~high_mask)
+    
+    # 3. Define a fade function. For example: risk = fade_scale * exp(-dist / sigma)
+    fade_risk = fade_scale * np.exp(-dist_map / sigma)
+    
+    # 4. Combine: final risk is the max of (existing risk) and (fade_risk)
+    risk_grid = np.maximum(risk_grid, fade_risk)
+    
+    return risk_grid
 # ---------------------------------------------------------------------------
 # Main Loop
 # ---------------------------------------------------------------------------
@@ -286,7 +310,7 @@ if __name__ == "__main__":
     margin = 4
     position, rotation_matrix = lidar_test.get_vehicle_pose()
     start_point = np.array([position[0], position[1]])  # vehicle's current position
-    destination_point = np.array([-1, -10]) 
+    destination_point = np.array([17, -8]) 
     min_x = min(start_point[0], destination_point[0]) - margin
     max_x = max(start_point[0], destination_point[0]) + margin
     min_y = min(start_point[1], destination_point[1]) - margin
@@ -350,8 +374,8 @@ if __name__ == "__main__":
                     Z_ground, non_nan_indices, max_height_diff=0.035, max_slope_degrees=30.0, radius=0.5
                 )
                 combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
-                masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)*2.0
-                masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)*2.0
+                masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)*3.0
+                masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)*3.0
                 
                 # Calculate the sum for non-NaN elements
                 sum_grid = np.ma.filled(masked_step_risk, 0) + np.ma.filled(masked_slope_risk, 0)
@@ -370,27 +394,33 @@ if __name__ == "__main__":
                         x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
                         y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
                         if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-                            total_risk_grid[x_idx, y_idx] += 2.0  # Mark obstacles as high risk
+                            total_risk_grid[x_idx, y_idx] = 4.0  # Mark obstacles as high risk
+                total_risk_grid = fade_with_distance_transform(
+                    total_risk_grid,
+                    high_threshold=0.65,
+                    fade_scale=4.0,   # top fade risk at distance=0
+                    sigma=3.0         # fade out within ~5 cells
+                )
+           
                 # Compute the maximum risk value, ignoring NaNs
                 max_risk = np.nanmax(total_risk_grid)
-                threshold = 0.2 * max_risk
+                threshold = 0.6 * max_risk
                 mask = total_risk_grid > threshold
                 total_risk_grid[mask] = np.exp(total_risk_grid[mask])
                 # Interpolate missing risk values.
                 interpolation_radius = 1.5
                 total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
                 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.80)
+                cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.5)
 
                 # filled the NaN values with 0.80
                 cvar_combined_risk_filled = np.pad(cvar_combined_risk, pad_width=2, mode='constant', constant_values=0.80)
                 cvar_combined_risk = cvar_combined_risk.filled(0.50)
 
-
                 # Optionally mask cells far from the vehicle.
                 distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
                 cvar_combined_risk[distance_from_vehicle.T > 15.0] = np.nan
-
+                
                 # Convert vehicle position to grid indices.
                 start_idx = (np.digitize(vehicle_x, x_edges) - 1, np.digitize(vehicle_y, y_edges) - 1)
                 dest_idx = (np.digitize(destination_point[0], x_edges) - 1, np.digitize(destination_point[1], y_edges) - 1)
