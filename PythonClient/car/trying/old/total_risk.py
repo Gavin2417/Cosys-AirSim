@@ -52,7 +52,29 @@ def interpolate_in_radius(grid, radius):
             grid[coord[0], coord[1]] = np.sum(weighted_values) / np.sum(weights)
 
     return grid
-
+from scipy.ndimage import distance_transform_edt
+def fade_with_distance_transform(risk_grid, high_threshold=0.4, fade_scale=4.0, sigma=5.0):
+    """
+    Increases risk near cells above (high_threshold * max_risk) using a distance transform.
+    fade_scale: peak risk to assign at distance=0
+    sigma: controls how quickly the risk decays with distance
+    """
+    grid_max = np.nanmax(risk_grid)
+    threshold_val = high_threshold * grid_max
+    
+    # 1. Identify "high risk" cells
+    high_mask = (risk_grid > threshold_val)
+    
+    # 2. Compute distance to nearest high-risk cell for each free cell
+    dist_map = distance_transform_edt(~high_mask)
+    
+    # 3. Define a fade function. For example: risk = fade_scale * exp(-dist / sigma)
+    fade_risk = fade_scale * np.exp(-dist_map / sigma)
+    
+    # 4. Combine: final risk is the max of (existing risk) and (fade_risk)
+    risk_grid = np.maximum(risk_grid, fade_risk)
+    
+    return risk_grid
 # Load the PLY point cloud file
 point_cloud = o3d.io.read_point_cloud('grid_point_cloud.ply')
 obs_point_cloud = o3d.io.read_point_cloud('obstacle_point_cloud.ply')
@@ -108,35 +130,45 @@ combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
 masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask)*2.0
 masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask)*2.0
 
-# Calculate the sum for non-NaN elements
+ # Calculate the sum for non-NaN elements
 sum_grid = np.ma.filled(masked_step_risk, 0) + np.ma.filled(masked_slope_risk, 0)
 # Create a mask: if both step and slope risks are NaN, then the result should be NaN
 both_nan_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
 # Use np.where to set cells where both risks are NaN to NaN, otherwise use the computed sum
 total_risk_grid = np.where(both_nan_mask, np.nan, sum_grid)
 
-# Add obstacle points to the risk grid
-for i in range(len(obstacle_x_vals)):
-    x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
-    y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
-    if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
 
-        total_risk_grid[x_idx, y_idx] +=2.0  # Mark obstacles as high risk
+# Add obstacle data to risk grid.
+if obs_point_cloud.size != 0:
+    # obstacle_points = filter_points_by_radius(obs_point_cloud, center, radius)
+    obstacle_x_vals = obs_point_cloud[:, 0]
+    obstacle_y_vals = obs_point_cloud[:, 1]
+    for i in range(len(obstacle_x_vals)):
+        x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
+        y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
+        if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
+            total_risk_grid[x_idx, y_idx] = 4.0  # Mark obstacles as high risk
+total_risk_grid = fade_with_distance_transform(
+    total_risk_grid,
+    high_threshold=0.65,
+    fade_scale=4.0,   # top fade risk at distance=0
+    sigma=3.0         # fade out within ~5 cells
+)
+
 # Compute the maximum risk value, ignoring NaNs
 max_risk = np.nanmax(total_risk_grid)
-threshold = 0.4 * max_risk
+threshold = 0.6 * max_risk
 mask = total_risk_grid > threshold
 total_risk_grid[mask] = np.exp(total_risk_grid[mask])
-
-# Interpolate missing (NaN) values in the risk grid
-interpolation_radius = 1.5  # Set the interpolation radius
+# Interpolate missing risk values.
+interpolation_radius = 1.5
 total_risk_grid = interpolate_in_radius(total_risk_grid, interpolation_radius)
-
-# Mask NaN values in total_risk_grid for transparency
 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
+cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.5)
 
-# Calculate CVaR for each grid cell
-cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.9)
+# filled the NaN values with 0.80
+cvar_combined_risk_filled = np.pad(cvar_combined_risk, pad_width=2, mode='constant', constant_values=0.80)
+cvar_combined_risk = cvar_combined_risk.filled(0.50)
 # Define the colormap
 colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
 cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
