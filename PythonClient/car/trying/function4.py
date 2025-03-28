@@ -80,6 +80,6 @@ def compute_cvar_cellwise(risk_grid, alpha=0.20):
     cvar_grid = np.full_like(risk_grid, np.nan)  # Start with a grid of NaNs
 
     # Compute CVaR only for valid cells
-    cvar_grid[valid_mask] = np.clip(mu[valid_mask] + sigma * (phi / (1 - alpha)),0, 40)
+    cvar_grid[valid_mask] = np.clip(mu[valid_mask] + sigma * (phi / (1 - alpha)),0, 30)
     
     return cvar_grid
