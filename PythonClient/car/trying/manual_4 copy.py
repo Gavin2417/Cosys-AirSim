@@ -13,7 +13,7 @@ import numpy.ma as ma
 from scipy.spatial import cKDTree
 import heapq
 import math  # For trigonometry
-
+import cvxpy as cp
 # ---------------------------------------------------------------------------
 # Interpolation: Fill in missing (NaN) grid cells using nearby valid cells.
 # ---------------------------------------------------------------------------
@@ -279,6 +279,7 @@ if __name__ == "__main__":
     iteration_list = []
     iteration = 0
     prev_time = time.time()
+    prev_position = None
     try:
         while True:
             current_time = time.time()
@@ -290,6 +291,7 @@ if __name__ == "__main__":
                 points = points[np.linalg.norm(points, axis=1) > 0.6]
 
                 position, rotation_matrix = lidar_test.get_vehicle_pose()
+                current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
                 points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
                 points_world[:, 2] = -points_world[:, 2]
                 label = np.array(groundseg.run(points_world))
@@ -403,49 +405,106 @@ if __name__ == "__main__":
                 ax.scatter(vehicle_y, vehicle_x, color="green", label="Start", zorder=5)
                 ax.scatter(destination_point[1], destination_point[0], color="red", label="Destination", zorder=5)
                 ax.legend()
-
+                if prev_position is not None:
+                    current_velocity = np.linalg.norm(np.array([vehicle_x, vehicle_y]) - prev_position) / dt
+                else:
+                    current_velocity = 0.05  # default initial speed
+                prev_position = np.array([vehicle_x, vehicle_y])
                 # -------------------------------
                 # PID Control for Following the Manual Path
                 # -------------------------------
                 if current_target_index < len(smoothed_manual_path):
-                    # Get the current target point.
-                    target_point = smoothed_manual_path[current_target_index]
+                    # MPC parameters
+                    N_mpc = 10         # Prediction horizon (number of steps)
+                    dt_mpc = 0.1       # MPC time step (s)
+                    L = 2.5            # Vehicle wheelbase (adjust as needed)
                     
-                    # Calculate the distance to the target point.
-                    distance_to_target = np.linalg.norm(np.array(target_point) - np.array([vehicle_x, vehicle_y]))
+                    # Build reference trajectory from smoothed_manual_path starting at current_target_index.
+                    # For each step in the horizon, we extract the reference x,y.
+                    # We also compute a reference yaw (from the path’s direction) and set a target speed.
+                    x_ref = []
+                    y_ref = []
+                    yaw_ref = []
+                    v_ref = []
+                    for t in range(N_mpc + 1):
+                        idx = min(current_target_index + t, len(smoothed_manual_path) - 1)
+                        ref_point = smoothed_manual_path[idx]
+                        x_ref.append(ref_point[0])
+                        y_ref.append(ref_point[1])
+                        # Compute reference yaw: if not at the end, use the next point; otherwise use previous difference.
+                        if idx < len(smoothed_manual_path) - 1:
+                            dx = smoothed_manual_path[idx + 1][0] - ref_point[0]
+                            dy = smoothed_manual_path[idx + 1][1] - ref_point[1]
+                            ref_yaw = math.atan2(dy, dx)
+                        else:
+                            if idx > 0:
+                                dx = smoothed_manual_path[idx][0] - smoothed_manual_path[idx - 1][0]
+                                dy = smoothed_manual_path[idx][1] - smoothed_manual_path[idx - 1][1]
+                                ref_yaw = math.atan2(dy, dx)
+                            else:
+                                ref_yaw = current_heading
+                        yaw_ref.append(ref_yaw)
+                        # Set a constant target speed; you may compute this based on path curvature.
+                        v_ref.append(0.05)
                     
-                    # If the vehicle is close enough, move to the next waypoint.
-                    if distance_to_target < 1.5:
-                        current_target_index += 2
-                        current_target_index = min(current_target_index, len(smoothed_manual_path) - 1)
-                        target_point = smoothed_manual_path[current_target_index]
-                    # Compute desired heading (angle towards target point)
-                    desired_heading = math.atan2(target_point[1] - vehicle_y,
-                                                target_point[0] - vehicle_x)
-                    # Compute current heading from the rotation matrix.
-                    current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+                    # Define MPC optimization variables.
+                    x_var    = cp.Variable(N_mpc + 1)
+                    y_var    = cp.Variable(N_mpc + 1)
+                    yaw_var  = cp.Variable(N_mpc + 1)
+                    v_var    = cp.Variable(N_mpc + 1)
+                    delta_var= cp.Variable(N_mpc)
+                    a_var    = cp.Variable(N_mpc)
                     
-                    # Calculate heading error and wrap to [-pi, pi]
-                    heading_error = desired_heading - current_heading
-                    heading_error = (heading_error + math.pi) % (2 * math.pi) - math.pi
-
-                    # Use PID controller to compute steering command.
-                    steering = steering_pid.compute(heading_error)
-                    steering = max(min(steering, 1), -1)
+                    cost = 0
+                    constraints = []
                     
-                    # ---- Forward (Throttle) Control ----
-                    # Compute forward error as projection onto the vehicle's heading.
-                    dx = target_point[0] - vehicle_x
-                    dy = target_point[1] - vehicle_y
-                    forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
-                    throttle = forward_pid.compute(forward_error)
-                    throttle = max(min(throttle, 0.0275), 0.0)
+                    # Initial state constraints.
+                    constraints += [x_var[0]   == vehicle_x,
+                                    y_var[0]   == vehicle_y,
+                                    yaw_var[0] == current_heading,
+                                    v_var[0]   == current_velocity]
                     
-                    if abs(steering) > 0.75:
-                        throttle = 0
+                    for t in range(N_mpc):
+                        # Kinematic bicycle model dynamics.
+                        constraints += [x_var[t+1]   == x_var[t] + v_var[t] * cp.cos(yaw_var[t]) * dt_mpc]
+                        constraints += [y_var[t+1]   == y_var[t] + v_var[t] * cp.sin(yaw_var[t]) * dt_mpc]
+                        constraints += [yaw_var[t+1] == yaw_var[t] + (v_var[t] / L) * delta_var[t] * dt_mpc]
+                        constraints += [v_var[t+1]   == v_var[t] + a_var[t] * dt_mpc]
+                        
+                        # Tracking cost: penalize deviation from the reference trajectory.
+                        cost += cp.square(x_var[t+1] - x_ref[t+1])
+                        cost += cp.square(y_var[t+1] - y_ref[t+1])
+                        cost += cp.square(yaw_var[t+1] - yaw_ref[t+1])
+                        cost += cp.square(v_var[t+1] - v_ref[t+1])
+                        
+                        # Control effort cost.
+                        cost += cp.square(delta_var[t]) + cp.square(a_var[t])
+                        
+                        # Control input constraints.
+                        constraints += [cp.abs(delta_var[t]) <= 0.75]
+                        constraints += [a_var[t] <= 1.0, a_var[t] >= -1.0]
                     
-                    lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
-                                                      lidar_test.vehicleName)
+                    # Ensure velocity remains non-negative.
+                    constraints += [v_var >= 0]
+                    
+                    # Solve the MPC optimization problem.
+                    prob = cp.Problem(cp.Minimize(cost), constraints)
+                    prob.solve(solver=cp.OSQP)
+                    
+                    if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
+                        optimal_steering = delta_var.value[0]
+                        optimal_acceleration = a_var.value[0]
+                        # Send computed control commands.
+                        lidar_test.client.setCarControls(
+                            airsim.CarControls(throttle=optimal_acceleration, steering=optimal_steering),
+                            lidar_test.vehicleName
+                        )
+                    else:
+                        # Fallback if MPC fails: stop the vehicle.
+                        lidar_test.client.setCarControls(
+                            airsim.CarControls(throttle=0.0, steering=0.0),
+                            lidar_test.vehicleName
+                        )
                 
                 # ------------------------------------------------------------------
                 # Compute total error for path tracking
