@@ -351,7 +351,7 @@ if __name__ == "__main__":
                 # Filter points within a 15-unit radius.
                 vehicle_x, vehicle_y = position[0], position[1]
                 center = np.array([vehicle_x, vehicle_y])
-                radius = 15
+                radius = 13
                 ground_points = filter_points_by_radius(ground_points, center, radius)
 
                 # Extract X, Y, Z for ground points.
@@ -390,11 +390,9 @@ if __name__ == "__main__":
                     obstacle_points = filter_points_by_radius(obstacle_points, center, radius)
                     obstacle_x_vals = obstacle_points[:, 0]
                     obstacle_y_vals = obstacle_points[:, 1]
-                    for i in range(len(obstacle_x_vals)):
-                        x_idx = np.digitize(obstacle_x_vals[i], x_edges) - 1
-                        y_idx = np.digitize(obstacle_y_vals[i], y_edges) - 1
-                        if 0 <= x_idx < len(x_mid) and 0 <= y_idx < len(y_mid):
-                            total_risk_grid[x_idx, y_idx] = 4.0  # Mark obstacles as high risk
+                    x_idx = np.clip(np.digitize(obstacle_x_vals, x_edges) - 1, 0, len(x_mid)-1)
+                    y_idx = np.clip(np.digitize(obstacle_y_vals, y_edges) - 1, 0, len(y_mid)-1)
+                    total_risk_grid[x_idx, y_idx] = 4.0
                 total_risk_grid = fade_with_distance_transform(
                     total_risk_grid,
                     high_threshold=0.65,
@@ -514,10 +512,13 @@ if __name__ == "__main__":
                         dx = target_point[0] - vehicle_x
                         dy = target_point[1] - vehicle_y
                         forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
-                        throttle = forward_pid.compute(forward_error)
-                        throttle = max(min(throttle, 0.05), 0.0)
+                        throttle_value = forward_pid.compute(forward_error)
+                        throttle_value = max(min(throttle_value, 0.2), 0.0)
                         if abs(steering) > 0.75:
                             throttle = 0
+                        else:
+                            scaling_factor = (0.75 - abs(steering)) / 0.75
+                            throttle = throttle_value * scaling_factor
                         # Set vehicle controls.
                         lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
                                                           lidar_test.vehicleName)
