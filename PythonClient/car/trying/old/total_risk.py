@@ -214,7 +214,7 @@ def fade_with_distance_transform(risk_grid, high_threshold=0.4, fade_scale=4.0, 
     threshold_val = high_threshold * grid_max
     high_mask = risk_grid > threshold_val
     dist_map = distance_transform_edt(~high_mask)
-    fade_risk = fade_scale * np.exp(-dist_map / sigma)
+    fade_risk   = fade_scale * np.exp(-dist_map / sigma)
     return np.maximum(risk_grid, fade_risk)
 point_cloud = o3d.io.read_point_cloud('grid_point_cloud.ply')
 obs_point_cloud = o3d.io.read_point_cloud('obstacle_point_cloud.ply')
@@ -245,8 +245,8 @@ X, Y = np.meshgrid(x_mid, y_mid)
 Z_ground, _, _, _ = binned_statistic_2d(
     ground_x_vals, ground_y_vals, ground_z_vals, statistic='mean', bins=[x_edges, y_edges]
 )
-
-# Calculate risk grids.
+# 4. Calculate slope and step risks from ground data.
+# non_nan_indices holds indices (i, j) where Z_ground is not nan.
 non_nan_indices = np.argwhere(~np.isnan(Z_ground))
 step_risk_grid, slope_risk_grid = calculate_combined_risks(
     Z_ground, non_nan_indices, max_height_diff=0.035, max_slope_degrees=30.0, radius=0.5
@@ -259,12 +259,10 @@ both_nan_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
 total_risk_grid = np.where(both_nan_mask, np.nan, sum_grid)
 
 # Incorporate obstacle risk.
-# if obstacle_points.size != 0:
-#     # obstacle_points = filter_points_by_radius(obstacle_points, center, radius_filter)
-#     if obstacle_points.size != 0:
+
 obs_x_idx = np.clip(np.digitize(obs_point_cloud[:, 0], x_edges) - 1, 0, len(x_mid)-1)
 obs_y_idx = np.clip(np.digitize(obs_point_cloud[:, 1], y_edges) - 1, 0, len(y_mid)-1)
-total_risk_grid[obs_x_idx, obs_y_idx] = 2.0
+total_risk_grid[obs_x_idx, obs_y_idx] = 3.0
 
 # Apply fading and transform risk values.
 total_risk_grid = fade_with_distance_transform(total_risk_grid,
@@ -272,23 +270,37 @@ total_risk_grid = fade_with_distance_transform(total_risk_grid,
                                                 fade_scale=4.0,
                                                 sigma=3.0)
 max_risk = np.nanmax(total_risk_grid)
-threshold = 0.6 * max_risk
+threshold = 0.01 * max_risk
 mask = total_risk_grid > threshold
 total_risk_grid[mask] = np.exp(total_risk_grid[mask])
 total_risk_grid = interpolate_in_radius(total_risk_grid, 1.5)
 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.5)
-cvar_combined_risk = cvar_combined_risk.filled(0.50)
+cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.5, radius=4.0)
+# cvar_combined_risk = fade_with_distance_transform(cvar_combined_risk,
+#                                                 high_threshold=0.65,
+#                                                 fade_scale=4.0,
+#                                                 sigma=3.0)
+cvar_combined_risk  = np.ma.masked_invalid(cvar_combined_risk)
+# 8. Visualization of the final CVaR risk map.
+# Build a custom colormap from gray to yellow to red.
+# 1) Define your five colors in order:
+colors = [
+    (0.5, 0.5, 0.5),  # gray
+    (1.0, 1.0, 0.0),  # yellow
+    (1.0, 0.65, 0.0), # orange
+    (1.0, 0.0, 0.0),  # red
+    (0.0, 0.0, 0.0)   # black
+]
 
-# Visualization
-colors = [(0.5, 0.5, 0.5), (1, 1, 0), (1, 0, 0)]
-cmap = LinearSegmentedColormap.from_list("gray_yellow_red", colors)
+# 2) Create a smooth colormap from them:
+cmap = LinearSegmentedColormap.from_list("gray_yellow_orange_red_black", colors, N=256)
 
-plt.figure(figsize=(10, 8))
-plt.title("CVaR Risk Map from Point Cloud")
+# 3) Plot your CVaR map with the new cmap:
+plt.figure(figsize=(10,8))
+plt.title("Continuous CVaR Risk Map")
 plt.xlabel("Y")
 plt.ylabel("X")
-plt.pcolormesh(Y, X, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.7)
+plt.pcolormesh(Y, X, cvar_combined_risk.T, shading='auto', cmap=cmap, alpha=0.9)
 plt.colorbar(label="CVaR Risk")
 plt.tight_layout()
 plt.show()

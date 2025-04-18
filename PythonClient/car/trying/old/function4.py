@@ -65,21 +65,32 @@ def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.4, max_s
     return step_risk_grid, slope_risk_grid
 
 
-def compute_cvar_cellwise(risk_grid, alpha=0.20):
+def compute_cvar_cellwise(risk_grid, alpha=0.2, radius=5.0):
     """
-    Optimized computation of CVaR for a grid, assuming a normal distribution for risks.
+    For each valid cell, collect all risk values within `radius` (in grid cells),
+    compute the α‑quantile (VaR) of that local sample, then average all local values
+    ≥ VaR to get the empirical CVaR.
     """
-    # Mask NaN values to avoid unnecessary computation
-    valid_mask = ~np.isnan(risk_grid)
-    
-    mu = np.zeros_like(risk_grid)
-    mu[valid_mask] = risk_grid[valid_mask]
-    
-    sigma = 0.1  # Adjust standard deviation as needed
-    phi = norm.pdf(norm.ppf(alpha))
-    cvar_grid = np.full_like(risk_grid, np.nan)  # Start with a grid of NaNs
+    rows, cols = risk_grid.shape
+    cvar = np.full_like(risk_grid, np.nan)
 
-    # Compute CVaR only for valid cells
-    cvar_grid[valid_mask] = np.clip(mu[valid_mask] + sigma * (phi / (1 - alpha)),0, 50)
-    
-    return cvar_grid
+    # 1) Build a KD‑tree of all valid‐risk cell coords
+    valid_mask = ~np.isnan(risk_grid)
+    coords = np.column_stack(np.where(valid_mask))
+    values = risk_grid[valid_mask]
+    tree = cKDTree(coords)
+
+    # 2) For each valid cell, query its neighborhood
+    for idx, (r, c) in enumerate(coords):
+        neigh_idx = tree.query_ball_point((r, c), radius)
+        local_vals = values[neigh_idx]
+        if local_vals.size == 0:
+            continue
+
+        # 3) Empirical VaR (α‑quantile)
+        var = np.quantile(local_vals, alpha)
+        # 4) Average the tail ≥ VaR
+        tail = local_vals[local_vals >= var]
+        cvar[r, c] = tail.mean() if tail.size else var
+
+    return cvar
