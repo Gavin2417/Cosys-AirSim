@@ -11,7 +11,7 @@ from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma
 import cosysairsim as airsim
 from linefit import ground_seg
-from function4 import calculate_combined_risks, compute_cvar_cellwise
+from function5 import calculate_combined_risks, compute_cvar_cellwise
 from scipy.ndimage import generic_filter
 # ---------------------------------------------------------------------------
 # Interpolation: Fill in missing (NaN) grid cells using nearby valid cells.
@@ -319,11 +319,11 @@ if __name__ == "__main__":
             # Calculate risk grids.
             non_nan_indices = np.argwhere(~np.isnan(Z_ground))
             step_risk_grid, slope_risk_grid = calculate_combined_risks(
-                Z_ground, non_nan_indices, max_height_diff=0.035, max_slope_degrees=30.0, radius=0.5
+                Z_ground, non_nan_indices, max_height_diff=0.032, max_slope_degrees=20.0, radius=0.5
             )
             combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
-            masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask) * 3.0
-            masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask) * 3.0
+            masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask) * 2.0
+            masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask) * 2.0
             sum_grid = np.ma.filled(masked_step_risk, 0) + np.ma.filled(masked_slope_risk, 0)
             both_nan_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
             total_risk_grid = np.where(both_nan_mask, np.nan, sum_grid)
@@ -334,7 +334,7 @@ if __name__ == "__main__":
                 if obstacle_points.size != 0:
                     obs_x_idx = np.clip(np.digitize(obstacle_points[:, 0], x_edges) - 1, 0, len(x_mid)-1)
                     obs_y_idx = np.clip(np.digitize(obstacle_points[:, 1], y_edges) - 1, 0, len(y_mid)-1)
-                    total_risk_grid[obs_x_idx, obs_y_idx] = 4.0
+                    total_risk_grid[obs_x_idx, obs_y_idx] = 3.0
 
             # Apply fading and transform risk values.
             total_risk_grid = fade_with_distance_transform(total_risk_grid,
@@ -342,12 +342,12 @@ if __name__ == "__main__":
                                                            fade_scale=4.0,
                                                            sigma=3.0)
             max_risk = np.nanmax(total_risk_grid)
-            threshold = 0.6 * max_risk
+            threshold = 0.20 * max_risk
             mask = total_risk_grid > threshold
             total_risk_grid[mask] = np.exp(total_risk_grid[mask])
             total_risk_grid = interpolate_in_radius(total_risk_grid, 1.5)
             masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-            cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.5)
+            cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.7, radius=4.0)
             cvar_combined_risk = cvar_combined_risk.filled(0.50)
 
             # Mask cells far from the vehicle.
@@ -376,7 +376,7 @@ if __name__ == "__main__":
                 path_coords = np.array([[x_mid[cell[0]], y_mid[cell[1]]] for cell in path])
                 distances = np.linalg.norm(path_coords - vehicle_pos, axis=1)
                 closest_index = np.argmin(distances)
-                LOOKAHEAD_STEPS = 3
+                LOOKAHEAD_STEPS = 8
                 RISK_THRESHOLD = 0.60
                 lookahead_cells = path[closest_index : closest_index + LOOKAHEAD_STEPS]
                 risks_ahead = [
