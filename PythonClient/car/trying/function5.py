@@ -73,8 +73,10 @@ def compute_cvar_cellwise(risk_grid, alpha=0.2, radius=5.0):
         if local_vals.size == 0:
             continue
 
-        # 3) Empirical VaR (α‑quantile)
-        var = np.quantile(local_vals, alpha)
+        clean = np.ma.compressed(local_vals)    # gives a 1‑D ndarray of just the unmasked values
+        if clean.size == 0:
+            continue
+        var = np.quantile(clean, alpha)
         # 4) Average the tail ≥ VaR
         tail = local_vals[local_vals >= var]
         cvar[r, c] = tail.mean() if tail.size else var

@@ -268,19 +268,25 @@ total_risk_grid[obs_x_idx, obs_y_idx] = 3.0
 total_risk_grid = fade_with_distance_transform(total_risk_grid,
                                                 high_threshold=0.65,
                                                 fade_scale=4.0,
-                                                sigma=3.0)
-max_risk = np.nanmax(total_risk_grid)
-threshold = 0.01 * max_risk
-mask = total_risk_grid > threshold
-total_risk_grid[mask] = np.exp(total_risk_grid[mask])
+                                                sigma=2.0)
+# max_risk = np.nanmax(total_risk_grid)
+# threshold = 0.01 * max_risk
+# mask = total_risk_grid > threshold
+# total_risk_grid[mask] = np.exp(total_risk_grid[mask])
 total_risk_grid = interpolate_in_radius(total_risk_grid, 1.5)
 masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.5, radius=4.0)
+cvar_combined_risk = compute_cvar_cellwise(masked_total_risk_grid, alpha=0.8, radius=4.0)
 # cvar_combined_risk = fade_with_distance_transform(cvar_combined_risk,
 #                                                 high_threshold=0.65,
 #                                                 fade_scale=4.0,
 #                                                 sigma=3.0)
 cvar_combined_risk  = np.ma.masked_invalid(cvar_combined_risk)
+max_risk = np.nanmax(cvar_combined_risk)
+threshold = 0.01 * max_risk
+mask = cvar_combined_risk > threshold
+cvar_combined_risk[mask] = np.exp(cvar_combined_risk[mask])
+# cvar_combined_risk = cvar_combined_risk.filled(0.50)
+
 # 8. Visualization of the final CVaR risk map.
 # Build a custom colormap from gray to yellow to red.
 # 1) Define your five colors in order:
@@ -289,11 +295,11 @@ colors = [
     (1.0, 1.0, 0.0),  # yellow
     (1.0, 0.65, 0.0), # orange
     (1.0, 0.0, 0.0),  # red
-    (0.0, 0.0, 0.0)   # black
+    # (0.0, 0.0, 0.0)   # black
 ]
 
 # 2) Create a smooth colormap from them:
-cmap = LinearSegmentedColormap.from_list("gray_yellow_orange_red_black", colors, N=256)
+cmap = LinearSegmentedColormap.from_list("gray_yellow_orange_red", colors, N=256)
 
 # 3) Plot your CVaR map with the new cmap:
 plt.figure(figsize=(10,8))
