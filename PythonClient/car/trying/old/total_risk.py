@@ -249,11 +249,11 @@ Z_ground, _, _, _ = binned_statistic_2d(
 # non_nan_indices holds indices (i, j) where Z_ground is not nan.
 non_nan_indices = np.argwhere(~np.isnan(Z_ground))
 step_risk_grid, slope_risk_grid = calculate_combined_risks(
-    Z_ground, non_nan_indices, max_height_diff=0.035, max_slope_degrees=30.0, radius=0.5
+    Z_ground, non_nan_indices, max_height_diff=0.032, max_slope_degrees=15.0, radius=0.5
 )
 combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
-masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask) * 2.0
-masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask) * 2.0
+masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask) * 1.0
+masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask) * 3.0
 sum_grid = np.ma.filled(masked_step_risk, 0) + np.ma.filled(masked_slope_risk, 0)
 both_nan_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
 total_risk_grid = np.where(both_nan_mask, np.nan, sum_grid)
