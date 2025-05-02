@@ -72,7 +72,7 @@ def serialize(obj):
         # primitive (int, float, bool, str, etc.)
         return obj
 if __name__ == "__main__":
-    output_folder = "test"
+    output_folder = "data"
     track_folder = create_incrementing_folder(base_name="track", parent_folder=output_folder)
 
 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
             # points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
             points_world = points.copy()
             points_world[:, 2] = -points_world[:, 2]
-            # get the length of the point cloud
+
             length = len(points_world)
             # print(f"Length of point cloud: {length}")
             # Save point cloud to .ply
