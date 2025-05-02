@@ -1,14 +1,14 @@
-# import setup_path
-import os, math, time, heapq
+import os
+import math
+import time
+import heapq
 import numpy as np
 import open3d as o3d
-from matplotlib.colors import LinearSegmentedColormap
-import numpy.ma as ma
 import cosysairsim as airsim
+import cv2
 from function5 import calculate_combined_risks, compute_cvar_cellwise
 from scipy.ndimage import generic_filter
-
-
+import json
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
         self.client = airsim.CarClient()
@@ -53,21 +53,31 @@ class lidarTest:
     def transform_to_world(self, points, position, rotation_matrix):
         points_rotated = np.dot(points, rotation_matrix.T)
         return points_rotated + position
-    def get_camera_image(self, camera_name="0", image_type=airsim.ImageType.Scene):
-        responses = self.client.simGetImages([
-            airsim.ImageRequest(camera_name, image_type, False, False)
-        ], vehicle_name=self.vehicleName)
-        if responses and responses[0].height != 0 and responses[0].width != 0:
-            img1d = np.frombuffer(responses[0].image_data_uint8, dtype=np.uint8)
-            img_rgb = img1d.reshape(responses[0].height, responses[0].width, 3)
-            return img_rgb
-        return None
-import cv2
+def create_incrementing_folder(base_name="track", parent_folder="test"):
+    os.makedirs(parent_folder, exist_ok=True)  # Ensure 'test' folder exists
+    i = 1
+    while True:
+        folder_name = os.path.join(parent_folder, f"{base_name}_{i}")
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+            print(f"Created folder: {folder_name}")
+            return folder_name
+        i += 1
+def serialize(obj):
+    if hasattr(obj, "__dict__"):
+        return {k: serialize(v) for k, v in obj.__dict__.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [serialize(v) for v in obj]
+    else:
+        # primitive (int, float, bool, str, etc.)
+        return obj
 if __name__ == "__main__":
-    # Initialize lidar and grid maps.
-    lidar_test = lidarTest('gpulidar1', 'CPHusky')
-    # lidar_test.client.enableApiControl(True, 'CPHusky')
+    output_folder = "test"
+    track_folder = create_incrementing_folder(base_name="track", parent_folder=output_folder)
 
+
+    lidar_test = lidarTest('gpulidar1', 'CPHusky')
+    counter = 0
 
     try:
         while True:
@@ -75,19 +85,51 @@ if __name__ == "__main__":
             if point_cloud_data is None:
                 continue
 
-            # Process point cloud.
             points = np.array(point_cloud_data[:, :3], dtype=np.float64)
             points = points[np.linalg.norm(points, axis=1) > 0.6]
             position, rotation_matrix = lidar_test.get_vehicle_pose()
-            points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
-            points_world[:, 2] = -points_world[:, 2]  # Adjust Z if needed
-        
-            png_image = lidar_test.get_camera_image(camera_name="0", image_type=airsim.ImageType.Scene)
-            # show image
-            
-            # cv2.imshow("image", png_image)
-            # cv2.waitKey(1)
+            # points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
+            points_world = points.copy()
+            points_world[:, 2] = -points_world[:, 2]
+            # get the length of the point cloud
+            length = len(points_world)
+            # print(f"Length of point cloud: {length}")
+            # Save point cloud to .ply
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points_world)
+            ply_filename = os.path.join(track_folder, f"{counter}.ply")
+            o3d.io.write_point_cloud(ply_filename, pcd)
 
-    finally:
-        # lidar_test.client.enableApiControl(False, 'CPHusky')
-        lidar_test.client.reset()
+            # Get and save camera image properly
+            png_image = lidar_test.client.simGetImage("0", airsim.ImageType.Scene)
+            if png_image is not None and len(png_image) > 0:
+                img_filename = os.path.join(track_folder, f"{counter}.png")
+                with open(img_filename, "wb") as f:
+                    f.write(png_image)
+
+            # save the car information
+            car_state = lidar_test.client.getCarState()
+            # print(car_state)
+            car_state_filename = os.path.join(track_folder, f"{counter}_car_state.json")
+            car_state_dict = serialize(car_state)
+    
+
+            with open(car_state_filename, "w") as f:
+                json.dump(car_state_dict, f, indent=2)
+
+            # Get the collision information
+            collision_info = lidar_test.client.simGetCollisionInfo()
+            collision_info_filename = os.path.join(track_folder, f"{counter}_collision_info.json")
+            collision_info_dict = serialize(collision_info)
+            with open(collision_info_filename, "w") as f:
+                json.dump(collision_info_dict, f, indent=2)
+            
+            
+            # if collision_info.has_collided:
+            #     break
+
+
+            counter += 1
+            print(f"Saved {counter} point clouds and images to {track_folder}")
+    except KeyboardInterrupt:
+        pass
