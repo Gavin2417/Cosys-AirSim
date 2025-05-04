@@ -58,7 +58,6 @@ def label_points(main_folder, counter, start_num=0, threshold_check=1.2):
         end_frame   = len(names_png)
         threshold   = threshold_check
 
-        pc_vis = o3d.geometry.PointCloud()
         # label every points in every frame with previous and future frames
         for idx in tqdm(range(start_frame, end_frame), desc="Labeling frames"):
             plyf = track_path + f"/{idx}.ply"
@@ -68,14 +67,12 @@ def label_points(main_folder, counter, start_num=0, threshold_check=1.2):
                 print(f"[skip {idx}] missing base files")
                 continue
 
-            # --- load & transform LiDAR at base frame idx
             cloud = o3d.io.read_point_cloud(plyf)
-            pts   = np.asarray(cloud.points)
-            car0  = json.load(open(carf))
+            pts = np.asarray(cloud.points)
+            car0 = json.load(open(carf))
             pos0, R0 = get_pose(car0)
             world_pts = (R0 @ pts.T).T + pos0
 
-            # --- init “ever” masks
             ever_close = np.zeros(len(world_pts), dtype=bool)
             ever_collision = np.zeros(len(world_pts), dtype=bool)
 
@@ -93,7 +90,7 @@ def label_points(main_folder, counter, start_num=0, threshold_check=1.2):
 
                 # update car‐proximity mask
                 pos_car, _ = get_pose(car_j)
-                d_car      = np.linalg.norm(world_pts - pos_car, axis=1)
+                d_car = np.linalg.norm(world_pts - pos_car, axis=1)
                 ever_close |= (d_car < (threshold - 0.2))
 
                 # update collision mask
@@ -104,7 +101,7 @@ def label_points(main_folder, counter, start_num=0, threshold_check=1.2):
                     ever_collision |= (d_col < (threshold + 0.2))
                 j += 1
 
-            #  0 = Uncertainty, 1 = safe , 2 = risk
+            #  0 = uncertainty, 1 = safe , 2 = risk
             labels = np.zeros(len(world_pts), dtype=np.uint8)
             labels[ ever_close & ~ever_collision ] = 1
             labels[ ever_collision ] = 2
