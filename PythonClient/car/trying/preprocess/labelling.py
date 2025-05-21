@@ -29,8 +29,8 @@ def get_pose(state):
 
 def label_points(main_folder, counter, start_num=0, threshold_check=1.2):
     # Go to sub folder and count tracks
-    for i in tqdm(range(1, counter + 1), desc="Labeling tracks"):
-        track_path = rf'..\{main_folder}\track_{i}'
+    for i in tqdm(range(counter), desc="Labeling tracks"):
+        track_path = rf'..\{main_folder}\{i}'
 
         # Get the len of the files in the folder
         try:
@@ -117,6 +117,13 @@ def label_points(main_folder, counter, start_num=0, threshold_check=1.2):
         label_files = [f for f in os.listdir(track_path) if f.endswith('_labels.npy')]
         assert len(label_files) == len(names_ply), \
             f"Error: Number of label files does not match number of frames in track {i}."
+        #remove the files
+        if os.path.exists(track_path + '/0_car_state.json'):
+            os.remove(track_path + '/0_car_state.json')
+            os.remove(track_path + '/0_collision_info.json')
+            os.remove(track_path + '/0.ply')
+            os.remove(track_path + '/0.png')
+            os.remove(track_path + '/0_labels.npy')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
