@@ -55,9 +55,9 @@ class lidarTest:
         return points_rotated + position
 def create_incrementing_folder(base_name="track", parent_folder="test"):
     os.makedirs(parent_folder, exist_ok=True)  # Ensure 'test' folder exists
-    i = 1
+    i = 0
     while True:
-        folder_name = os.path.join(parent_folder, f"{base_name}_{i}")
+        folder_name = os.path.join(parent_folder, f"{i}")
         if not os.path.exists(folder_name):
             os.makedirs(folder_name)
             print(f"Created folder: {folder_name}")
