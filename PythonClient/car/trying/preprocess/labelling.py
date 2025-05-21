@@ -3,12 +3,13 @@ import open3d as o3d
 import numpy as np
 from tqdm import tqdm
 def count_tracks(main_folder):
+    
     try:
         new_path = rf'..\{main_folder}'
-        pattern = re.compile(r'^track_\d+$')
-        names = os.listdir(new_path)
-        matches = [n for n in names if pattern.match(n)]
-        return len(matches)
+        # Get the list of all files and directories in the specified directory
+        files = os.listdir(new_path)
+        print(f"Found {len(files)} tracks in {main_folder}.")
+        return len(files)
     except FileNotFoundError:
         print(f"Error: The directory '{new_path}' does not exist.")
         return 0
@@ -45,9 +46,9 @@ def label_points(main_folder, counter, start_num=0, threshold_check=1.2):
             pattern_ply = re.compile(r'^[^\.]+\.ply$')
             names_ply = [n for n in names if pattern_ply.match(n)]
 
-            # print(f'Found {len(names_json)} json in track {i}.')
-            # print(f'Found {len(names_png)} png in track {i}.')
-            # print(f'Found {len(names_ply)} ply in track {i}.')
+            print(f'Found {len(names_json)} json in track {i}.')
+            print(f'Found {len(names_png)} png in track {i}.')
+            print(f'Found {len(names_ply)} ply in track {i}.')
             assert (len(names_json)//2) == len(names_png) == len(names_ply), f'Error: The number of json, png, and ply files do not match in track {i}.'
 
         except FileNotFoundError:
