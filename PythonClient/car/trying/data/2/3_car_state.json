@@ -1,0 +1,41 @@
+{
+  "speed": 0.0,
+  "gear": 0,
+  "rpm": 20.000001907348633,
+  "maxrpm": 500.0,
+  "handbrake": false,
+  "kinematics_estimated": {
+    "position": {
+      "x_val": -3.7970188714098185e-05,
+      "y_val": -7.288212811040751e-10,
+      "z_val": 0.026174403727054596
+    },
+    "orientation": {
+      "x_val": -3.5115063634627575e-10,
+      "y_val": -4.337786231189966e-05,
+      "z_val": 4.503685424595005e-09,
+      "w_val": 1.0
+    },
+    "linear_velocity": {
+      "x_val": 0.0,
+      "y_val": 0.0,
+      "z_val": -0.0
+    },
+    "angular_velocity": {
+      "x_val": 0.0,
+      "y_val": 0.0,
+      "z_val": 0.0
+    },
+    "linear_acceleration": {
+      "x_val": 8.310868224725709e-07,
+      "y_val": 7.430696479676126e-15,
+      "z_val": -0.00042711259447969496
+    },
+    "angular_acceleration": {
+      "x_val": 5.864247668796452e-06,
+      "y_val": -0.05078737437725067,
+      "z_val": -2.2549876632638188e-08
+    }
+  },
+  "timestamp": 1747815245702954400
+}

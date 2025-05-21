@@ -1,0 +1,22 @@
+{
+  "has_collided": true,
+  "penetration_depth": -0.00207105977460742,
+  "time_stamp": 1747815259261187400,
+  "normal": {
+    "x_val": 0.0,
+    "y_val": 1.0,
+    "z_val": -1.5612511283791264e-17
+  },
+  "impact_point": {
+    "x_val": 2.9247894287109375,
+    "y_val": 1.8489644527435303,
+    "z_val": 0.06921184062957764
+  },
+  "position": {
+    "x_val": 3.013540267944336,
+    "y_val": 2.3846335411071777,
+    "z_val": 0.025783035904169083
+  },
+  "object_name": "StaticMeshActor_3",
+  "object_id": 0
+}
