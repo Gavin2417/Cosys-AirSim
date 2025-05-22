@@ -8,8 +8,31 @@ import gymnasium
 from gymnasium import spaces
 from airgym.envs.airsim_env import AirSimEnv
 import logging
+import os
+import json
+import open3d as o3d
 from PIL import Image
 logging.basicConfig(level=logging.INFO)
+
+def create_incrementing_folder(parent_folder="data"):
+    os.makedirs(parent_folder, exist_ok=True)  # Ensure 'test' folder exists
+    i = 0
+    while True:
+        folder_name = os.path.join(parent_folder, f"{i}")
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+            print(f"Created folder: {folder_name}")
+            return folder_name
+        i += 1
+    
+def serialize(obj):
+    if hasattr(obj, "__dict__"):
+        return {k: serialize(v) for k, v in obj.__dict__.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [serialize(v) for v in obj]
+    else:
+        # primitive (int, float, bool, str, etc.)
+        return obj
 class lidarTest:
 
     def __init__(self, lidar_name, vehicle_name):
@@ -104,6 +127,11 @@ class AirSimCarEnvLidar(AirSimEnv):
 
         # Add a frame counter
         self.frame_count = 0
+        # where we'll dump per‐episode recordings
+        self.output_root = "../car/trying/data"
+        # these get set in reset()
+        self.track_folder = None  
+        self.record_counter = 0
 
     def _setup_car(self):
         self.car.reset()
@@ -158,8 +186,18 @@ class AirSimCarEnvLidar(AirSimEnv):
         # Get Lidar data
         lidar_data = self.lidarTest.get_data(True)
         if lidar_data is None:
-            # Fill lidar_data with zeros if no data is returned
+            # no new sweep ⇒ all zeros
             lidar_data = np.zeros((16384, 5), dtype=np.float32)
+        else:
+            M, D = lidar_data.shape  # D should be 5
+            if M >= 16384:
+                # randomly down-sample to 16384
+                idx = np.random.choice(M, 16384, replace=False)
+                lidar_data = lidar_data[idx]
+            else:
+                # pad out with zeros at the end
+                pad = np.zeros((16384 - M, D), dtype=lidar_data.dtype)
+                lidar_data = np.vstack([lidar_data, pad])
 
         # Pose data should be float32 and must remain within the bounds you set
         self.car_state = self.car.getCarState()
@@ -231,36 +269,74 @@ class AirSimCarEnvLidar(AirSimEnv):
         elif self.state["collision"]:
             distance_reward = -10  # Penalty for collision
             done = False
-            truncated = True  # Mark episode as truncated
+            truncated = False  # Mark episode as truncated
             self.prev_dist = None  # Reset for next episode
         return distance_reward, done, truncated
 
     def step(self, action):
+        # apply action, get obs + reward
         self._do_action(action)
         obs = self._get_obs()
-
         reward, done, truncated = self._compute_reward()
 
-        # Increment the frame counter
-        self.frame_count += 1
+        # record this timestep
+        folder = self.track_folder
+        idx    = self.record_counter
 
-        # Check if the frame count exceeds 50
-        if self.frame_count >= 30:
+        # -- 1) save LIDAR to PLY
+        pc = obs["lidar"]  # already padded/truncated to (16384,5)
+        xyz = pc[:, :3]
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz)
+        o3d.io.write_point_cloud(
+            os.path.join(folder, f"{idx}.ply"), pcd
+        )
+
+        # -- 2) save image (grayscale uint8 H×W×1)
+        img = obs["image"].squeeze()  # H×W
+        im  = Image.fromarray(img)
+        im.save(os.path.join(folder, f"{idx}.png"))
+
+        # -- 3) save car state & collision info
+        car_state      = self.car.getCarState()
+        car_state_filename = os.path.join(folder, f"{idx}_car_state.json")
+        car_state_dict = serialize(car_state)
+
+        with open(car_state_filename, "w") as f:
+            json.dump(car_state_dict, f, indent=2)
+
+        collision_info = self.car.simGetCollisionInfo()
+        collision_info_filename = os.path.join(folder, f"{idx}_collision_info.json")
+        collision_info_dict = serialize(collision_info)
+        with open(collision_info_filename, "w") as f:
+            json.dump(collision_info_dict, f, indent=2)
+
+        self.record_counter += 1
+
+        # frame‐limit truncation
+        self.frame_count += 1
+        if self.frame_count >= 200:
             done = False
             truncated = True
             self.frame_count = 0
 
         return obs, reward, done, truncated, self.state
 
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         if seed is not None:
             np.random.seed(seed)
 
-        # Reset the frame counter
+        # -- new folder for this episode
+        self.track_folder   = create_incrementing_folder(self.output_root)
+        self.record_counter = 0
+
+        # reset frame counter, car, etc.
         self.frame_count = 0
-        
         self._setup_car()
         self._do_action(1)
-        self.compte_prev_dist(np.array([0, 0, 0.8]), np.array([5.5, 5.5, 0.8]))
+        self.compte_prev_dist(
+            np.array([0, 0, 0.8]), np.array([5.5, 5.5, 0.8])
+        )
         return self._get_obs(), {}
