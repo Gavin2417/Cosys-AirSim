@@ -48,7 +48,7 @@ env = DummyVecEnv(
             gymnasium.make(
                 "airgym:airsim-car-lidar-sample-v0",
                 ip_address="127.0.0.1",
-                image_shape=(84, 84, 1),
+                image_shape=(84,84,4)
             )
         )
     ]
