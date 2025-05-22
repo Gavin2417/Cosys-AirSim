@@ -7,9 +7,7 @@ from gymnasium.spaces import Box, Dict
 import gymnasium
 from gymnasium import spaces
 from airgym.envs.airsim_env import AirSimEnv
-import logging
-import os
-import json
+import os, io, json, logging
 import open3d as o3d
 from PIL import Image
 logging.basicConfig(level=logging.INFO)
@@ -108,7 +106,7 @@ class AirSimCarEnvLidar(AirSimEnv):
         self.action_space = spaces.Discrete(4)
 
         self.image_request = airsim.ImageRequest(
-            "0", airsim.ImageType.DepthPerspective, True, False
+            "0", airsim.ImageType.Scene, False, True
         )
 
         # Add Lidar data request
@@ -161,19 +159,10 @@ class AirSimCarEnvLidar(AirSimEnv):
         time.sleep(1)
 
     def transform_obs(self, response):
-        img1d = np.array(response.image_data_float, dtype=np.float64)
-        img1d = 255 / np.maximum(np.ones(img1d.size), img1d)
-        img2d = np.reshape(img1d, (response.height, response.width))
-
-        image = Image.fromarray(img2d)
-        im_final = image.resize((84, 84)).convert("L")
-
-        # save image into a file
-        self.num += 1
-        im_final.save(f"C:/Users/gavin/OneDrive/Documents/AirSim/test/image_{self.num}.png")
-
-        return np.array(im_final).reshape([84, 84, 1])
-
+        # it's now a PNG
+        img = Image.open(io.BytesIO(response.image_data_uint8))
+        img = img.resize((84, 84), Image.BILINEAR)
+        return np.asarray(img, dtype=np.uint8)
 
     def _get_obs(self):
         # Get image data
@@ -268,9 +257,7 @@ class AirSimCarEnvLidar(AirSimEnv):
         # Handling collision
         elif self.state["collision"]:
             distance_reward = -10  # Penalty for collision
-            done = False
-            truncated = False  # Mark episode as truncated
-            self.prev_dist = None  # Reset for next episode
+            
         return distance_reward, done, truncated
 
     def step(self, action):

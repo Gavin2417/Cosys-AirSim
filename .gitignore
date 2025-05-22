@@ -404,3 +404,4 @@ docker/LinuxBlocks/*
 /cosys-airsim-data-scripts/
 *.zip
 *.mp4
+/PythonClient/car/trying/data
