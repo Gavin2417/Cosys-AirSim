@@ -88,12 +88,17 @@ class lidarTest:
 
 
 class AirSimCarEnvLidar(AirSimEnv):
-    def __init__(self, ip_address, image_shape):
+    def __init__(self, ip_address, image_shape,
+                 start_points=None,       # 📍 add these two args
+                 goal_points=None):
         super().__init__(image_shape)
 
         self.image_shape = image_shape
         self.start_ts = 0
-
+        self.start_points = start_points 
+        self.goal_points  = goal_points  
+        self.current_start = None
+        self.current_goal  = None
         self.state = {
             "position": np.zeros(3),
             "prev_position": np.zeros(3),
@@ -130,7 +135,17 @@ class AirSimCarEnvLidar(AirSimEnv):
         # these get set in reset()
         self.track_folder = None  
         self.record_counter = 0
-
+    def _sample_episode_points(self):
+        """Pick one start and one goal for this episode."""
+        self.current_start = np.array(
+            self.start_points[np.random.randint(len(self.start_points))],
+            dtype=np.float32
+        )
+        self.current_goal = np.array(
+            self.goal_points[np.random.randint(len(self.goal_points))],
+            dtype=np.float32
+        )
+        print(f"Start: {self.current_start}, Goal: {self.current_goal}")
     def _setup_car(self):
         self.car.reset()
         self.car.enableApiControl(True)
@@ -219,20 +234,19 @@ class AirSimCarEnvLidar(AirSimEnv):
         BETA = 3
 
         # Single goal point
-        goal_pt = np.array([5.5, 5.5, 0.8])
-        start_pt = np.array([-5,0, 0.8])
-        initial_dist = np.linalg.norm(start_pt - goal_pt)  # Corrected typo
-        
+
+        initial_dist = np.linalg.norm(self.current_start - self.current_goal)
         car_pt = self.state["pose"].position.to_numpy_array()
 
         # Calculate Euclidean distance to the goal point
-        dist = np.linalg.norm(car_pt - goal_pt)
+        dist = np.linalg.norm(car_pt - self.current_goal)
 
         # Initialize self.prev_dist if this is the first step
         if self.prev_dist is None:
-            self.prev_dist = initial_dist
+            self.prev_dist = self.prev_dist = np.linalg.norm(self.current_start - self.current_goal)
+
         # Exponential reward based on distance reduction
-        distance_reward = 10 * np.exp(-(dist / initial_dist)) * (self.prev_dist - dist)
+        distance_reward = 20 * np.exp(-(dist / initial_dist)) * (self.prev_dist - dist)
         # Update previous distance
         self.prev_dist = dist
 
@@ -249,14 +263,14 @@ class AirSimCarEnvLidar(AirSimEnv):
         
         # Handling braking and speed condition
         elif self.car_controls.brake == 0 and self.car_state.speed <= 0.5:
-            distance_reward = -10  # Penalty for stalling
+            distance_reward = -1  # Penalty for stalling
             done = False
             truncated = True  # Mark the episode as truncated
             self.prev_dist = None  # Reset for next episode
         
         # Handling collision
         elif self.state["collision"]:
-            distance_reward = -10  # Penalty for collision
+            distance_reward = -2  # Penalty for collision
             
         return distance_reward, done, truncated
 
@@ -326,4 +340,6 @@ class AirSimCarEnvLidar(AirSimEnv):
         self.compte_prev_dist(
             np.array([0, 0, 0.8]), np.array([5.5, 5.5, 0.8])
         )
+        self._sample_episode_points()
+        self.compte_prev_dist(self.current_start, self.current_goal)
         return self._get_obs(), {}

@@ -48,7 +48,9 @@ env = DummyVecEnv(
             gymnasium.make(
                 "airgym:airsim-car-lidar-sample-v0",
                 ip_address="127.0.0.1",
-                image_shape=(84,84,4)
+                image_shape=(84,84,4),
+                start_points=[(-5, 0, 0.8), (0, 0, 0.8), (5, 5, 0.8)],
+                goal_points=[(5.5, 5.5, 0.8), (16, -8, 0.8),(18, 8, 0.8)]
             )
         )
     ]
