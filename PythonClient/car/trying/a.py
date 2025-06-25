@@ -53,6 +53,12 @@ class lidarTest:
     def transform_to_world(self, points, position, rotation_matrix):
         points_rotated = np.dot(points, rotation_matrix.T)
         return points_rotated + position
+    def is_flipped(self, threshold=-0.7):
+        """Check if the vehicle is flipped upside down."""
+        orient = self.client.simGetVehiclePose().orientation
+        rot_matrix = self.quaternion_to_rotation_matrix(orient)
+        up_vector = rot_matrix[:, 2]  # Z-axis in world frame
+        return up_vector[2] < threshold 
 def create_incrementing_folder(base_name="track", parent_folder="test"):
     os.makedirs(parent_folder, exist_ok=True)  # Ensure 'test' folder exists
     i = 0
@@ -71,6 +77,7 @@ def serialize(obj):
     else:
         # primitive (int, float, bool, str, etc.)
         return obj
+
 if __name__ == "__main__":
     output_folder = "data"
     track_folder = create_incrementing_folder(base_name="track", parent_folder=output_folder)
@@ -131,5 +138,10 @@ if __name__ == "__main__":
 
             counter += 1
             print(f"Saved {counter} point clouds and images to {track_folder}")
+            # the husky is upside down, so we need to stop when it is upside down
+            if counter >= 4000 or lidar_test.is_flipped():
+                print("Reached 4000 point clouds, stopping.")
+                break
+
     except KeyboardInterrupt:
         pass
