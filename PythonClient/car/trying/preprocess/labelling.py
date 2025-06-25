@@ -30,7 +30,7 @@ def get_pose(state):
 
 def label_points(main_folder, counter, start_num=0, threshold_check=1.2):
     # Go to sub folder and count tracks
-    for i in tqdm(range(counter), desc="Labeling tracks"):
+    for i in tqdm(range(1,counter), desc="Labeling tracks"):
         track_path = rf'..\{main_folder}\{i}'
 
         # Get the len of the files in the folder
