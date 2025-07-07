@@ -1,0 +1,251 @@
+from os.path import join
+import numpy as np
+import os
+import json
+import pandas as pd
+from tqdm import tqdm
+import open3d as o3d
+import utils.cpp_wrappers.cpp_subsampling.grid_subsampling as cpp_subsampling
+# import utils.nearest_neighbors.lib.python.nearest_neighbors as nearest_neighbors
+import utils.nearest_neighbors.nearest_neighbors   as nearest_neighbors
+# from utils.nearest_neighbors.nearest_neighbors import knn_batch as nearest_neighbors
+
+class DataProcessing:
+
+    @staticmethod
+    def load_pc_kitti(pc_path):
+        pcd = o3d.io.read_point_cloud(pc_path)
+        points = np.asarray(pcd.points)
+        # print('points', points.shape)
+        return points.astype(np.float32)
+
+    @staticmethod
+    def load_label_kitti(label_path):
+
+        return np.load(label_path).reshape(-1).astype(np.int32)
+    
+    @staticmethod
+    def load_pc_semantic3d(filename):
+        pc_pd = pd.read_csv(filename, header=None, delim_whitespace=True, dtype=np.float16)
+        pc = pc_pd.values
+        return pc
+
+    @staticmethod
+    def load_label_semantic3d(filename):
+        label_pd = pd.read_csv(filename, header=None, delim_whitespace=True, dtype=np.uint8)
+        cloud_labels = label_pd.values
+        return cloud_labels
+
+    @staticmethod
+    def get_file_list(dataset_path, seq_list):
+        data_list = []
+        for seq_id in seq_list:
+            seq_path = join(dataset_path, seq_id)
+            pc_path = join(seq_path, 'velodyne')
+            new_data = [(seq_id, f[:-4]) for f in np.sort(os.listdir(pc_path))]
+            data_list.extend(new_data)
+
+        return data_list
+
+    def get_active_list(list_root):
+        train_list = []
+        pool_list = []
+        with open(join(list_root, 'label_data.json')) as f:
+            train_list = json.load(f)
+        with open(join(list_root, 'ulabel_data.json')) as f:
+            pool_list = json.load(f)
+        pool_list += train_list
+        train_list = []
+        return train_list, pool_list
+
+    @staticmethod
+    def knn_search(support_pts, query_pts, k):
+        """
+        :param support_pts: points you have, B*N1*3
+        :param query_pts: points you want to know the neighbour index, B*N2*3
+        :param k: Number of neighbours in knn search
+        :return: neighbor_idx: neighboring points indexes, B*N2*k
+        """
+
+        neighbor_idx = nearest_neighbors.knn_batch(support_pts, query_pts, k, omp=True)
+        return neighbor_idx
+
+    @staticmethod
+    def data_aug(xyz, color, labels, idx, num_out):
+        num_in = len(xyz)
+        dup = np.random.choice(num_in, num_out - num_in)
+        xyz_dup = xyz[dup, ...]
+        xyz_aug = np.concatenate([xyz, xyz_dup], 0)
+        color_dup = color[dup, ...]
+        color_aug = np.concatenate([color, color_dup], 0)
+        idx_dup = list(range(num_in)) + list(dup)
+        idx_aug = idx[idx_dup]
+        label_aug = labels[idx_dup]
+        return xyz_aug, color_aug, idx_aug, label_aug
+
+    @staticmethod
+    def shuffle_idx(x):
+        # random shuffle the index
+        idx = np.arange(len(x))
+        np.random.shuffle(idx)
+        return x[idx]
+
+    @staticmethod
+    def shuffle_list(data_list):
+        indices = np.arange(np.shape(data_list)[0])
+        np.random.shuffle(indices)
+        data_list = data_list[indices]
+        return data_list
+
+    @staticmethod
+    def grid_sub_sampling(points, features=None, labels=None, grid_size=0.1, verbose=0):
+        """
+        CPP wrapper for a grid sub_sampling (method = barycenter for points and features
+        :param points: (N, 3) matrix of input points
+        :param features: optional (N, d) matrix of features (floating number)
+        :param labels: optional (N,) matrix of integer labels
+        :param grid_size: parameter defining the size of grid voxels
+        :param verbose: 1 to display
+        :return: sub_sampled points, with features and/or labels depending of the input
+        """
+   
+        if (features is None) and (labels is None):
+            return cpp_subsampling.compute(points, sampleDl=grid_size, verbose=verbose)
+        elif labels is None:
+            return cpp_subsampling.compute(points, features=features, sampleDl=grid_size, verbose=verbose)
+        elif features is None:
+            return cpp_subsampling.compute(points, classes=labels, sampleDl=grid_size, verbose=verbose)
+        else:
+            return cpp_subsampling.compute(points, features=features, classes=labels, sampleDl=grid_size,
+                                           verbose=verbose)
+
+    @staticmethod
+    def IoU_from_confusions(confusions):
+        """
+        Computes IoU from confusion matrices.
+        :param confusions: ([..., n_c, n_c] np.int32). Can be any dimension, the confusion matrices should be described by
+        the last axes. n_c = number of classes
+        :return: ([..., n_c] np.float32) IoU score
+        """
+
+        # Compute TP, FP, FN. This assume that the second to last axis counts the truths (like the first axis of a
+        # confusion matrix), and that the last axis counts the predictions (like the second axis of a confusion matrix)
+        TP = np.diagonal(confusions, axis1=-2, axis2=-1)
+        TP_plus_FN = np.sum(confusions, axis=-1)
+        TP_plus_FP = np.sum(confusions, axis=-2)
+
+        # Compute IoU
+        IoU = TP / (TP_plus_FP + TP_plus_FN - TP + 1e-6)
+
+        # Compute mIoU with only the actual classes
+        mask = TP_plus_FN < 1e-3
+        counts = np.sum(1 - mask, axis=-1, keepdims=True)
+        mIoU = np.sum(IoU, axis=-1, keepdims=True) / (counts + 1e-6)
+
+        # If class is absent, place mIoU in place of 0 IoU to get the actual mean later
+        IoU += mask * mIoU
+        return IoU
+
+    @staticmethod
+    def get_class_weights(data_root, paths, num_of_class):
+        # pre-calculate the number of points in each category
+        num_per_class = [0 for _ in range(num_of_class)]
+        for file_path in tqdm(paths, total=len(paths)):
+            label_path = join(data_root, file_path[0], 'labels', file_path[1] + '.npy')
+            label = np.load(label_path).reshape(-1)
+            inds, counts = np.unique(label, return_counts=True)
+            for i, c in zip(inds, counts):
+                if i == 0:      # 0 : unlabeled
+                    continue
+                else:
+                    num_per_class[i-1] += c
+        '''
+        if dataset_name == 'S3DIS':
+            num_per_class = np.array([3370714, 2856755, 4919229, 318158, 375640, 478001, 974733,
+                                      650464, 791496, 88727, 1284130, 229758, 2272837], dtype=np.int32)
+        elif dataset_name == 'Semantic3D':
+            num_per_class = np.array([5181602, 5012952, 6830086, 1311528, 10476365, 946982, 334860, 269353],
+                                     dtype=np.int32)
+        elif dataset_name == 'SemanticKITTI':
+            num_per_class = np.array([55437630, 320797, 541736, 2578735, 3274484, 552662, 184064, 78858,
+                                      240942562, 17294618, 170599734, 6369672, 230413074, 101130274, 476491114,
+                                      9833174, 129609852, 4506626, 1168181])
+        '''
+        num_per_class = np.array(num_per_class)
+        weight = num_per_class / float(sum(num_per_class))
+        ce_label_weight = 1 / (weight + 0.02)
+        return np.expand_dims(ce_label_weight, axis=0)
+
+    @staticmethod
+    def load_pc_ply(pc_path):
+        """
+        Load point cloud from PLY file
+        :param pc_path: path to the PLY file
+        :return: numpy array of points (N, 3)
+        """
+        pcd = o3d.io.read_point_cloud(pc_path)
+        points = np.asarray(pcd.points)
+        return points
+    @staticmethod
+    def preprocess_point_cloud(points,
+                                grid_size: float,
+                                nb_neighbors: int = 20,
+                                std_ratio: float = 2.0,
+                                target_n: int = None):
+        """
+        1) Voxel‐grid downsample to spacing=grid_size
+        2) Remove statistical outliers (nb_neighbors, std_ratio)
+        3) If target_n is given:
+             • If we have MORE than target_n points, do farthest‐point sampling
+             • If we have FEWER, pad by random duplication
+        Returns an (N',3) np.float32 array.
+        """
+        # --- Voxel down‐sample via your existing C++ wrapper ---
+        down = cpp_subsampling.compute(points.astype(np.float32),
+                                  sampleDl=grid_size,
+                                  verbose=0)
+
+        # --- Statistical outlier removal via Open3D ---
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(down)
+        pcd, ind = pcd.remove_statistical_outlier(nb_neighbors, std_ratio)
+        clean = np.asarray(pcd.points, dtype=np.float32)
+
+        if target_n is None:
+            return clean
+
+        N = clean.shape[0]
+        if N > target_n:
+            # Farthest‐point sampling (if you have a wrapper for it)
+            # Otherwise fall back to random choice
+            try:
+                fps_idx = DataProcessing.farthest_point_sampling(clean, target_n)
+                sampled = clean[fps_idx]
+            except AttributeError:
+                idx = np.random.choice(N, target_n, replace=False)
+                sampled = clean[idx]
+        else:
+            # pad with random duplicates
+            dup = np.random.choice(N, target_n - N, replace=True)
+            sampled = np.concatenate([clean, clean[dup]], axis=0)
+
+        return sampled
+
+    @staticmethod
+    def farthest_point_sampling(points: np.ndarray, k: int) -> np.ndarray:
+        """
+        (Optional) A simple Python implementation of FPS (if you don't have a C++ one).
+        Returns indices into `points`.
+        """
+        N = points.shape[0]
+        centroids = np.zeros(k, dtype=np.int32)
+        distances = np.full(N, np.inf)
+        # pick a random start
+        centroids[0] = np.random.randint(0, N)
+        for i in range(1, k):
+            # update distances
+            diff = points - points[centroids[i-1]]
+            dist2 = np.sum(diff**2, axis=1)
+            distances = np.minimum(distances, dist2)
+            centroids[i] = np.argmax(distances)
+        return centroids
