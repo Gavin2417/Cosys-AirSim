@@ -401,4 +401,15 @@ PythonClient/docs/_build
 /promo/
 /Unreal/Environments/BlocksComp/
 *.zip
+# /PythonClient/car/trying/data
+/PythonClient/car/trying/preprocess/rendered_frames
 /PythonClient/car/trying/data
+/PythonClient/car/trying/data
+/PythonClient/car/trying/data/0
+/PythonClient/car/trying/data/0
+/PythonClient/car/trying/preprocess/videos
+/PythonClient/car/trying/rand/data
+/PythonClient/car/trying/rand/log
+/PythonClient/car/trying/rand/output
+/PythonClient/car/trying/rand/result
+/PythonClient/car/trying/rand/visualize
