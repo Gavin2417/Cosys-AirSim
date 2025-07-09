@@ -1,3 +1,4 @@
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <Python.h>
 #include <numpy/arrayobject.h>
 #include "grid_subsampling/grid_subsampling.h"
@@ -45,12 +46,13 @@ static struct PyModuleDef moduledef =
     NULL,                   // m_free
 };
 
-PyMODINIT_FUNC PyInit_grid_subsampling(void)
-{
+PyMODINIT_FUNC PyInit_grid_subsampling(void) {
+    PyObject *m = PyModule_Create(&moduledef);
+    if (!m) return NULL;
+    /* this macro initializes all NumPy C-API pointers, and returns NULL on failure */
     import_array();
-	return PyModule_Create(&moduledef);
+    return m;
 }
-
 
 // Actual wrapper
 // **************
@@ -97,13 +99,21 @@ static PyObject *grid_subsampling_compute(PyObject *self, PyObject *args, PyObje
 		use_classes = false;
 
     // Interpret the input objects as numpy arrays.
-	PyObject *points_array = PyArray_FROM_OTF(points_obj, NPY_FLOAT, NPY_IN_ARRAY);
-	PyObject *features_array = NULL;
-	PyObject *classes_array = NULL;
+	PyArrayObject *points_array = (PyArrayObject*)PyArray_FROM_OTF(
+        points_obj,   /* input */
+        NPY_FLOAT32,  /* dtype */
+        NPY_ARRAY_IN_ARRAY /* read-only, aligned */
+    );
+    PyArrayObject *features_array = NULL;
+    PyArrayObject *classes_array  = NULL;
 	if (use_feature)
-		features_array = PyArray_FROM_OTF(features_obj, NPY_FLOAT, NPY_IN_ARRAY);
+		features_array = (PyArrayObject*)PyArray_FROM_OTF(
+            features_obj, NPY_FLOAT32, NPY_ARRAY_IN_ARRAY
+        );
 	if (use_classes)
-		classes_array = PyArray_FROM_OTF(classes_obj, NPY_INT, NPY_IN_ARRAY);
+		classes_array  = (PyArrayObject*)PyArray_FROM_OTF(
+            classes_obj,  NPY_INT32,   NPY_ARRAY_IN_ARRAY
+        );
 
 	// Verify data was load correctly.
 	if (points_array == NULL)
@@ -243,9 +253,11 @@ static PyObject *grid_subsampling_compute(PyObject *self, PyObject *args, PyObje
 	classes_dims[1] = ldim;
 
     // Create output array
-	PyObject *res_points_obj = PyArray_SimpleNew(2, point_dims, NPY_FLOAT);
-	PyObject *res_features_obj = NULL;
-	PyObject *res_classes_obj = NULL;
+	PyArrayObject *res_points_obj   = (PyArrayObject*)PyArray_SimpleNew(
+        2, point_dims, NPY_FLOAT32
+    );
+	PyArrayObject *res_features_obj = NULL;
+	PyArrayObject *res_classes_obj  = NULL;
 	PyObject *ret = NULL;
 
 	// Fill output array with values
@@ -254,13 +266,17 @@ static PyObject *grid_subsampling_compute(PyObject *self, PyObject *args, PyObje
 	if (use_feature)
 	{
 	    size_in_bytes = subsampled_points.size() * fdim * sizeof(float);
-		res_features_obj = PyArray_SimpleNew(2, feature_dims, NPY_FLOAT);
+		res_features_obj = (PyArrayObject*)PyArray_SimpleNew(
+            2, feature_dims, NPY_FLOAT32
+        );
 		memcpy(PyArray_DATA(res_features_obj), subsampled_features.data(), size_in_bytes);
 	}
 	if (use_classes)
 	{
 		size_in_bytes = subsampled_points.size() * ldim * sizeof(int);
-		res_classes_obj = PyArray_SimpleNew(2, classes_dims, NPY_INT);
+		res_classes_obj  = (PyArrayObject*)PyArray_SimpleNew(
+            2, classes_dims, NPY_INT32
+        );
 		memcpy(PyArray_DATA(res_classes_obj), subsampled_classes.data(), size_in_bytes);
 	}
 

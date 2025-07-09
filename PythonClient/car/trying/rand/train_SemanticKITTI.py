@@ -139,7 +139,7 @@ class Trainer:
             # Save best checkpoint
             if mean_iou > self.highest_val_iou:
                 self.hightest_val_iou = mean_iou
-                checkpoint_file = os.path.join(self.log_dir, 'checkpoint_ten.tar')
+                checkpoint_file = os.path.join(self.log_dir, 'checkpoint_original.tar')
                 self.save_checkpoint(checkpoint_file)
 
     def validate(self):

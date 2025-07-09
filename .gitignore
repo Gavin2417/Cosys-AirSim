@@ -413,3 +413,4 @@ PythonClient/docs/_build
 /PythonClient/car/trying/rand/output
 /PythonClient/car/trying/rand/result
 /PythonClient/car/trying/rand/visualize
+*.so
