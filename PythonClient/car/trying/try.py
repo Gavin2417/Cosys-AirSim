@@ -10,12 +10,17 @@ from scipy.spatial import cKDTree
 from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma
 import cosysairsim as airsim
-from linefit import ground_seg
+# from linefit import ground_seg
 from function5 import calculate_combined_risks, compute_cvar_cellwise
 from scipy.ndimage import generic_filter
-# ---------------------------------------------------------------------------
-# Interpolation: Fill in missing (NaN) grid cells using nearby valid cells.
-# ---------------------------------------------------------------------------
+base = os.path.dirname(__file__)        
+project_root = base
+print(project_root)
+rand_dir = os.path.join(project_root, "rand")
+os.chdir(rand_dir)
+from predict1 import RandlaGroundSegmentor
+
+
 def interpolate_in_radius(grid, radius):
     """
     Vectorized interpolation using cKDTree: fills NaNs in a grid based on nearby valid cells.
@@ -128,7 +133,6 @@ def smooth_path(path, window_size=5):
 # ---------------------------------------------------------------------------
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
-        self.client = airsim.CarClient()
         self.client = airsim.CarClient(ip="100.123.124.47")
         self.client.confirmConnection()
         self.vehicleName = vehicle_name
@@ -238,20 +242,17 @@ if __name__ == "__main__":
 
     # Initialize ground segmentation.
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
-    config_path = os.path.join(BASE_DIR, "../assets/config.toml")
-    if not os.path.exists(config_path):
-        print(f"Config file {config_path} not found, using default parameters")
-        groundseg = ground_seg()
-    else:
-        groundseg = ground_seg(config_path)
-
-    # Initialize visualization.
+    seg = RandlaGroundSegmentor(
+    device=None,
+    subsample_grid=0.1
+    )
+    seg = RandlaGroundSegmentor()
     fig, ax = plt.subplots()
     plt.ion()
     colorbar = None
     path = None
     temp_dest = None
-    temp_path = None
+    # temp_path = None
     steering_pid = PIDController(kp=0.8462027727540303, ki=0.023914715286008515, kd=0.0939731107200599, dt=0.1)
     forward_pid  = PIDController(kp=0.4, ki=0.05, kd=0.10, dt=0.1)
     current_target_index = 0
@@ -261,7 +262,7 @@ if __name__ == "__main__":
     margin = 4
     position, rotation_matrix = lidar_test.get_vehicle_pose()
     start_point = np.array([position[0], position[1]])
-    destination_point = np.array([17, -8])
+    destination_point = np.array([15, 0])
     min_x = min(start_point[0], destination_point[0]) - margin
     max_x = max(start_point[0], destination_point[0]) + margin
     min_y = min(start_point[1], destination_point[1]) - margin
@@ -273,7 +274,7 @@ if __name__ == "__main__":
     x_mid = (x_edges[:-1] + x_edges[1:]) / 2
     y_mid = (y_edges[:-1] + y_edges[1:]) / 2
     X, Y = np.meshgrid(x_mid, y_mid)
-
+    smoothed_path = None
     try:
         while True:
             point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
@@ -286,17 +287,18 @@ if __name__ == "__main__":
             position, rotation_matrix = lidar_test.get_vehicle_pose()
             points_world = lidar_test.transform_to_world(points, position, rotation_matrix)
             points_world[:, 2] = -points_world[:, 2]  # Adjust Z if needed
-            labels = np.array(groundseg.run(points_world))
+            labels = seg.segment(points_world)
+            # print(f"Processed {len(points_world)} points at timestamp {timestamp}")
+            # labels = np.array(groundseg.run(points_world))
 
             # Populate grid maps based on segmentation.
             for i, point in enumerate(points_world):
                 x, y, z = point
-                if labels[i] == 1:
+                if labels[i] == 0:
                     grid_map_ground.add_point(x, y, z, timestamp)
-                elif z > -position[2]:
-                    grid_map_obstacle.add_point(x, y, z, timestamp)
                 else:
-                    grid_map_ground.add_point(x, y, z, timestamp)
+                    grid_map_obstacle.add_point(x, y, z, timestamp)
+
 
             ground_points = grid_map_ground.get_height_estimate()
             obstacle_points = grid_map_obstacle.get_height_estimate()
