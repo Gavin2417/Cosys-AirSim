@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 # my module
-from utils.config import ConfigSemanticKITTI as cfg
+from utils.config import Config10labels as cfg
 from dataset.semkitti_testset import SemanticKITTI
 from network.RandLANet import Network
 import pickle
@@ -20,7 +20,7 @@ np.random.seed(0)
 warnings.filterwarnings("ignore")
 parser = argparse.ArgumentParser()
 parser.add_argument('--infer_type', default='sub', type=str, choices=['all', 'sub'], help='Infer ALL or just infer Subsample')
-parser.add_argument('--checkpoint_path', default='log/checkpoint_original.tar', help='Model checkpoint path [default: None]')
+parser.add_argument('--checkpoint_path', default='log/checkpoint_ten.tar', help='Model checkpoint path [default: None]')
 parser.add_argument('--test_id', default='3', type=str, help='Predicted sequence id [default: 08]')
 parser.add_argument('--result_dir', default='result/', help='Dump dir to save prediction [default: result/]')
 parser.add_argument('--yaml_config', default='utils/semantic-kitti.yaml', help='semantic-kitti.yaml path')

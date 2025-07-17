@@ -145,7 +145,7 @@ def smooth_path(path, window_size=5):
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
         # Connect to the AirSim simulator
-        self.client = airsim.CarClient()
+        self.client = airsim.CarClient(ip="100.123.124.47")
         self.client.confirmConnection()
         self.vehicleName = vehicle_name
         self.lidarName = lidar_name
@@ -231,6 +231,7 @@ class GridMap:
 if __name__ == "__main__":
     # Initialize Lidar test and grid maps.
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
+    lidar_test.client.enableApiControl(True, 'CPHusky')
     grid_map_ground = GridMap(resolution=0.1)
     grid_map_obstacle = GridMap(resolution=0.1)
 
