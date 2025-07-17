@@ -26,49 +26,40 @@ class AdaptivePIDController:
         self.integral = 0.0
         self.prev_error = 0.0
 
-    def compute(self, error, current_speed, distance_to_target, heading_error, throttle_prev, max_throttle=1):
-        # Start with base gains
+    def compute(self, error, current_speed, distance_to_target, heading_error, throttle_prev, max_throttle=1.0):
+        # Base gains
         kp_eff = self.kp_base
         ki_eff = self.ki_base
         kd_eff = self.kd_base
 
-        # Define thresholds for dynamic scaling
-        HIGH_SPEED_THRESH = 10.0  # m/s threshold for high speed
-        NEAR_DIST_THRESH = 2.0      # near target threshold (meters)
-        HEADING_ERR_THRESH = 0.5    # radians threshold
-
-        # Scale gains down if the vehicle is at high speed
-        if current_speed > HIGH_SPEED_THRESH:
-            kp_eff *= 0.7
-            ki_eff *= 0.5
-            kd_eff *= 1.2
-
-        # When approaching the target, reduce gains for gentler throttle changes
-        if distance_to_target < NEAR_DIST_THRESH:
+        # Dynamic gain tuning
+        if current_speed > 8.0:
+            kp_eff *= 0.6
+            kd_eff *= 1.3
+            ki_eff *= 0.4
+        if distance_to_target < 1.0:
             kp_eff *= 0.5
-            ki_eff *= 0.5
+            ki_eff *= 0.3
+            kd_eff *= 0.7
+        if abs(heading_error) > 0.6:
+            kp_eff *= 0.4
+            kd_eff *= 0.5
 
-        # If the heading error is high, reduce throttle aggressiveness
-        if abs(heading_error) > HEADING_ERR_THRESH:
-            kp_eff *= 0.5
-
-        # Compute the integral and derivative terms
+        # PID formula
         self.integral += error * self.dt
         derivative = (error - self.prev_error) / self.dt
         output = kp_eff * error + ki_eff * self.integral + kd_eff * derivative
         self.prev_error = error
 
-        # Rate limiting: prevent abrupt throttle changes
-        rate_limit = 0.005  # maximum throttle change per time step
+        # Smooth rate limiting
+        max_rate_change = 0.02 if current_speed < 3.0 else 0.01
         delta = output - throttle_prev
-        if delta > rate_limit:
-            output = throttle_prev + rate_limit
-        elif delta < -rate_limit:
-            output = throttle_prev - rate_limit
+        if abs(delta) > max_rate_change:
+            output = throttle_prev + np.clip(delta, -max_rate_change, max_rate_change)
 
-        # Clamp the output to allowed throttle values
-        output = max(min(output, max_throttle), 0.0)
-        return output
+        # Clamp between 0 and max_throttle
+        return np.clip(output, 0.0, max_throttle)
+
 
 # ---------------------------------------------------------------------------
 # Simple Moving Average Filter for Error Smoothing
@@ -194,7 +185,7 @@ def smooth_path(path, window_size=5):
 # ---------------------------------------------------------------------------
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
-        self.client = airsim.CarClient()
+        self.client = airsim.CarClient(ip="100.123.124.47")
         self.client.confirmConnection()
         self.vehicleName = vehicle_name
         self.lidarName = lidar_name
@@ -464,23 +455,24 @@ if __name__ == "__main__":
                     
                     dx = target_point[0] - vehicle_x
                     dy = target_point[1] - vehicle_y
+                    # --- Compute Throttle ---
                     raw_forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
                     
-                    # --- NEW: Scale the forward error to avoid saturating the PID ---
-                    scale_factor = 15.0  # adjust based on expected error magnitude
-                    scaled_forward_error = raw_forward_error / scale_factor
-                    filtered_forward_error = error_filter.add(scaled_forward_error)
-                    
-                    # Compute throttle command using the adaptive forward PID controller
-                    throttle = forward_pid.compute(filtered_forward_error, current_speed,
-                                                   distance_to_target, heading_error, throttle_prev)
+                    # Directly feed raw_forward_error to controller without extreme scaling
+                    filtered_forward_error = error_filter.add(raw_forward_error)
+
+                    throttle = forward_pid.compute(filtered_forward_error, current_speed, distance_to_target, heading_error, throttle_prev)
                     throttle_prev = throttle
-                    
-                    if abs(steering) > 0.7:
-                        throttle = 0
-                    
-                    lidar_test.client.setCarControls(airsim.CarControls(throttle=throttle, steering=steering),
-                                                      lidar_test.vehicleName)
+
+                    # NEW: Instead of cutting throttle to 0 when turning, reduce proportionally
+                    steering = steering_pid.compute(heading_error)
+                    steering = np.clip(steering, -1.0, 1.0)
+
+                    if abs(steering) > 0.6:
+                        throttle *= max(0.5, 1.0 - abs(steering))  # reduce throttle when steering hard
+
+                    controls = airsim.CarControls(throttle=throttle, steering=steering)
+                    lidar_test.client.setCarControls(controls, lidar_test.vehicleName)
                 
                 vehicle_pos = np.array([vehicle_x, vehicle_y])
                 path_distances = np.linalg.norm(smoothed_manual_path - vehicle_pos, axis=1)

@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 # my module
 from dataset.semkitti_trainset import SemanticKITTI
-from utils.config import ConfigSemanticKITTI as cfg
+from utils.config import Config10labels as cfg
 from utils.metric import compute_acc, IoUCalculator
 from network.RandLANet import Network
 from network.loss_func import compute_loss

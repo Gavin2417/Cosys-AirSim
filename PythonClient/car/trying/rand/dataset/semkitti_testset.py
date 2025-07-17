@@ -1,5 +1,5 @@
 from utils.data_process import DataProcessing as DP
-from utils.config import ConfigSemanticKITTI as cfg
+from utils.config import Config10labels as cfg
 from os.path import join
 import numpy as np
 import os
