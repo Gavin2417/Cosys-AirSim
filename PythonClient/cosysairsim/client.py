@@ -1,6 +1,7 @@
+from __future__ import print_function
 from .utils import *
 from .types import *
-import msgpackrpc  # install as admin: pip install rpc-msgpack
+import msgpackrpc  # install as admin: pip install msgpack-rpc-python
 import logging
 
 
@@ -8,12 +9,8 @@ class VehicleClient:
     def __init__(self, ip="", port=41451, timeout_value=3600):
         if ip == "":
             ip = "127.0.0.1"
-        self.client = msgpackrpc.Client(
-            msgpackrpc.Address(ip, port),
-            timeout=timeout_value,
-            pack_encoding='utf-8',
-            unpack_encoding='utf-8',
-        )
+        self.client = msgpackrpc.Client(msgpackrpc.Address(ip, port), timeout=timeout_value, pack_encoding='utf-8',
+                                        unpack_encoding='utf-8')
 
     #----------------------------------- Common vehicle APIs ---------------------------------------------
     def reset(self):
@@ -41,7 +38,7 @@ class VehicleClient:
         Returns:
             int: Client version number
         """
-        return 4  # sync with C++ client
+        return 3  # sync with C++ client
 
     def getServerVersion(self):
         """
@@ -60,7 +57,7 @@ class VehicleClient:
         Returns:
             int: Minimum required server version number
         """
-        return 4  # sync with C++ client
+        return 3  # sync with C++ client
 
     def getMinRequiredClientVersion(self):
         """
@@ -195,9 +192,7 @@ class VehicleClient:
         Returns:
             bool: True if successful, otherwise False
         """
-
-        logging.warning("simSetLightIntensity is deprecated, use the new Artificial Light API instead")
-        return self.simSetWorldLightIntensity(light_name, intensity)
+        return self.client.call("simSetLightIntensity", light_name, intensity)
 
     def simSwapTextures(self, tags, tex_id=0, component_id=0, material_id=0):
         """
@@ -725,21 +720,6 @@ class VehicleClient:
         """
         return self.client.call('simListSceneObjects', name_regex)
 
-    def simListSceneObjectsTags(self, name_regex='.*'):
-        """
-        Lists the objects present and the given tag matching the regular expression in the environment.
-
-        The default behavior is to list all objects with first tag. A regex can be used to return a smaller list
-        of matching objects or actors.
-
-        Args:
-            name_regex (str, optional): String to match actor tags against, e.g., "Gate.*".
-
-        Returns:
-            list[list[str, str]]: List containing the names of the objects.
-        """
-        return self.client.call('simListSceneObjectsTags', name_regex)
-
     def simLoadLevel(self, level_name):
         """
         Loads a level specified by its name.
@@ -1032,61 +1012,6 @@ class VehicleClient:
         """
         return np.array([r, g, b]) in load_colormap()
 
-    def simSetWorldLightVisibility(self, light_name, is_visible=True):
-        """
-        Enable or disable an artificial light set as a static world light.
-
-        Args:
-            light_name (str): Name of the world light.
-            is_visible (bool, optional): Set to true to enable the light, false to disable it.
-
-        Returns:
-            bool: True if the light was toggled.
-        """
-        return self.client.call('simSetWorldLightVisibility', light_name, is_visible)
-
-    def simSetWorldLightIntensity(self, light_name, intensity):
-        """
-        Set the intensity value of an artificial light set as a static world light.
-
-        Args:
-            light_name (str): Name of the world light.
-            intensity (float): The intensity value of the light. Depends on the Intensity unit.
-
-        Returns:
-            bool: True if the light was changed.
-        """
-        return self.client.call('simSetWorldLightIntensity', light_name, intensity)
-
-    def simSetVehicleLightVisibility(self, vehicle_name, light_name, is_visible=True):
-        """
-        Enable or disable an artificial light set as a vehicle light.
-
-        Args:
-            vehicle_name (str): Vehicle which the light is associated with.
-            light_name (str): Name of the world light.
-            is_visible (bool, optional): Set to true to enable the light, false to disable it.
-
-        Returns:
-            bool: True if the light was toggled.
-        """
-        return self.client.call('simSetVehicleLightVisibility', vehicle_name, light_name, is_visible)
-
-    def simSetVehicleLightIntensity(self, vehicle_name, light_name, intensity):
-        """
-        Set the intensity value of an artificial light set as a vehicle light.
-
-        Args:
-            vehicle_name (str): Vehicle which the light is associated with.
-            light_name (str): Name of the world light.
-            intensity (float): The intensity value of the light. Depends on the Intensity unit.
-
-        Returns:
-            bool: True if the light was changed.
-        """
-        return self.client.call('simSetVehicleLightIntensity', vehicle_name, light_name, intensity)
-
-
     def simAddDetectionFilterMeshName(self, camera_name, image_type, mesh_name, vehicle_name='', annotation_name=""):
         """
         Add mesh name to detect in wild card format
@@ -1285,38 +1210,6 @@ class VehicleClient:
             vehicle_name (str, optional): Name of the vehicle to move
         """
         self.client.call('simSetKinematics', state, ignore_collision, vehicle_name)
-
-    def simGetPhysicsRawKinematics(self, vehicle_name=''):
-        """
-        Get Physics engine raw kinematics of the vehicle
-
-        The position inside the returned KinematicsState is physics engine coordinate system, not Airsim
-        If you save it then you can load it back with simSetPhysicsRawKinematics
-        Accelaration is not used
-
-        Args:
-            vehicle_name (str, optional): Name of the vehicle
-
-        Returns:
-            KinematicsState: Physics engine raw kinematics
-        """
-        kinematics_state = self.client.call('simGetPhysicsRawKinematics', vehicle_name)
-        return KinematicsState.from_msgpack(kinematics_state)
-
-    simGetPhysicsRawKinematics.__annotations__ = {'return': KinematicsState}
-
-    def simSetPhysicsRawKinematics(self, state, vehicle_name=''):
-        """
-        Set Physics engine raw kinematics of the vehicle
-
-        Need to be simGetPhysicsRawKinematics value or same coordinate system
-        Accelaration is not used
-
-        Args:
-            state (KinematicsState): Desired Pose pf the vehicle
-            vehicle_name (str, optional): Name of the vehicle to move
-        """
-        self.client.call('simSetPhysicsRawKinematics', state, vehicle_name)
 
     def simGetGroundTruthEnvironment(self, vehicle_name=''):
         """
@@ -2435,22 +2328,3 @@ class CarClient(VehicleClient, object):
         """
         controls_raw = self.client.call('getCarControls', vehicle_name)
         return CarControls.from_msgpack(controls_raw)
-
-
-# #------------------------------ ComputerVision APIs ---------------------------------------
-# class ComputerVisionClient(VehicleClient, object):
-#     def __init__(self, ip="", port=41451, timeout_value=3600):
-#         super(ComputerVisionClient, self).__init__(ip, port, timeout_value)
-
-#     def getComputerVisionState(self, vehicle_name=''):
-#         """
-#         The position inside the returned ComputerVisionState is in the frame of the vehicle's starting point
-
-#         Args:
-#             vehicle_name (str, optional): Name of vehicle
-
-#         Returns:
-#             ComputerVisionState: Struct containing computer vision state values
-#         """
-#         state_raw = self.client.call('getComputerVisionState', vehicle_name)
-#         return ComputerVisionState.from_msgpack(state_raw)

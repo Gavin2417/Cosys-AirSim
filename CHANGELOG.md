@@ -1,52 +1,6 @@
-### April 2025 (version 3.3)
-* The latest available stable Unreal Engine version that is now targeted for release is 5.5. This means 5.4 will no longer be actively maintained. 
-* The documentation now is placed on a sub-URL page here: https://cosys-lab.github.io/Cosys-AirSim
-* Added [Artificial Lights](docs/lights.md) for generating static world lights or moving vehicle lights with many parameters exposed. 
-* Added fake motion blur, guassian blur, and radial blur noise effects to the camera settings.
-* Added new image type called _Lighting_ which only shows the light information and no materials. See [here](docs/image_apis.md#lighting) for more information. **Note this changes Annotation ImageType number to 11!** 
-* Added ForceUpdate to CaptureSettings to force it to update every render frame. This can fix issues with post-processing not applying correctly or other bugs related to camera appearing not correct.
-* Added shell scripts for building Docker with ROS2 package [#62 by kestr31](https://github.com/Cosys-Lab/Cosys-AirSim/pull/62).
-* Added `simListSceneObjectsTags` API call. [#68 by Kokika](https://github.com/Cosys-Lab/Cosys-AirSim/pull/68).
-* Added `simGetPhysicsRawKinematics` and `simSetPhysicsRawKinematics` API calls. [#69 and #70 by Kokika](https://github.com/Cosys-Lab/Cosys-AirSim/pull/69).
-* Added new blueprint callable event `OnResetEvent` for the AirSim game-mode that triggers when the reset function is used in AirSim.
-* Updated camera configuration to include all useful camera settings for post-processing. 
-* Updated documentation for capture and noise camera settings to include all available parameters.
-* Updated Client/Server RPC API version to 4 to force upgrades. 
-* Fixed BoxCar getting stuck in reverse. 
-* Fixed several matlab functions not following the correct naming scheme without `sim` prefix. 
-* Fixed annotation names not always containing the static mesh name if available.
-* Fixed `getGpsData` not working in Matlab API Client.
-* Fixed `setKinematics` not working in Matlab API Client.
-* Fixed build scripts on Linux and some deprecation warnings [#81 by edowson](https://github.com/Cosys-Lab/Cosys-AirSim/pull/81).
-* Fixed some Python API test scripts as they were failing due to deprecated functions. [#73 by bsamadi](https://github.com/Cosys-Lab/Cosys-AirSim/pull/73).
-
-### November/December 2024 (version 3.2)
-* Unreal 5.2.1 is now long term support and will continue to get releases build for it and new features and fixes added to it. 
-* Next to 5.2.1, the latest available stable Unreal Engine version will be targeted for releases, which currently is 5.4.
-* Other branches for other Unreal versions might be updated in the future, but no guarantees are given and are not actively maintained or tested.
-* Updated to be compatible with Unreal 5.5 on Windows, Linux is a work in progress.
-* Updated Python Client to have a much faster and more recent RPC library.
-* Updated and improved various documentation pages.
-* Updated joystick support on Linux.
-* Updated instance segmentation with option to add the Unreal Tag `InstanceSegmentation_disable` to the components/meshes you want to ignore in instance segmentation process.
-* Fixed the horizontal scanning pattern calculation of the GPULiDAR causing various issues when not using full 360 degrees FOV.
-* Fixed RGB color rendering for annotation system and instance segmentation having a few edge cases.
-
-### September/October 2024 (version 3.1)
-* Updated Docker support to use new official Unreal 5 containers for runtime binaries and source development with updated [tutorial](docs/docker_ubuntu.md) and scripts.
-* Added main setting parameter `InitialInstanceSegmentation` to toggle initial [Instance Segmentation](docs/instance_segmentation.md). It is enabled by default.
-* Added packaged binary of Blocks environment to releases for Windows and Linux for testing the simulation without needing the Unreal Editor.
-* Updated Matlab API Client:
-    * Removed startup arguments for API control and vehicle name when creating client.
-    * Added vehicle name argument to most functions. 
-    * Updated async drone functions to optionally be run in sync (wait for completion) with new `join` boolean argument.
-* Fixed [multi-layer annotation](docs/annotation.md) to no longer have very dark shadows with Lumen GI when enabling a max viewdistance for an annotation layer.
-* Fixed crash when the GPU Lidar material CSV file is empty or contains empty lines.
-* Updated sensor setting `DrawSensor` to false by default to avoid crashes.
-
 ### June/July 2024 (Version 3.0)
 * Updated to be compatible with Unreal 5.4. 
-    * Note that 5.3 and higher requires _r.DetailMode 2_ console command or scalability settings to be set to Epic to avoid issues with rendering the RGB scene camera sensor. More info [here](docs/unreal_custenv.md#unreal-scene-camera-bug).
+    * Note that 5.4 requires _r.DetailMode 2_ console command or scalability settings to be set to Epic to avoid issues with rendering the RGB scene camera sensor. More info [here](docs/unreal_custenv.md#unreal-5354-scene-camera-bug).
     * Updated rpclib version to unofficial patched version 2.3.1 to better support C++20.
     * Updated Eigen version to unofficial patched version 3.4.1 to better support C++20.
     * Updated cpp-linenoise library of DroneShell to support C++20.
@@ -54,7 +8,7 @@
     * Updated airlib to use C++20.
 * Updated to be compatible with Unreal 5.3. 
     * Note that 5.3 breaks debug rendering! Disable it to avoid issues in editor. [Fixed in 5.4](https://issues.unrealengine.com/issue/UE-199454)
-    * Note that 5.3 and higher requires _r.DetailMode 2_ console command or scalability settings to be set to Epic to avoid issues with rendering the RGB scene camera sensor. More info [here](docs/unreal_custenv.md#unreal-scene-camera-bug).
+    * Note that 5.3 requires _r.DetailMode 2_ console command or scalability settings to be set to Epic to avoid issues with rendering the RGB scene camera sensor. More info [here](docs/unreal_custenv.md#unreal-5354-scene-camera-bug).
 * Updated [ROS2 wrapper](docs/ros_cplusplus.md) to support Cosys-AirSim features and fix several issues:
     * Added support for annotation cameras.
     * Added support for GPU-Lidar and Echos sensors.

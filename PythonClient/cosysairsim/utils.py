@@ -272,8 +272,6 @@ def get_camera_type(cameraType):
         cameraTypeClass = ImageType.OpticalFlow
     elif cameraType == "OpticalFlowVis":
         cameraTypeClass = ImageType.OpticalFlowVis
-    elif cameraType == "Lighting":
-        cameraTypeClass = ImageType.Lighting
     elif cameraType == "Annotation":
         cameraTypeClass = ImageType.Annotation
     else:
@@ -301,8 +299,6 @@ def is_pixels_as_float(cameraType):
     elif cameraType == "OpticalFlow":
         return False
     elif cameraType == "OpticalFlowVis":
-        return False
-    elif cameraType == "Lighting":
         return False
     elif cameraType == "Annotation":
         return False
@@ -339,10 +335,9 @@ def get_image_bytes(data, cameraType):
         img_rgb_string = data.image_data_uint8
     elif cameraType == "OpticalFlowVis":
         img_rgb_string = data.image_data_uint8
-    elif cameraType == "Lighting":
-        img_rgb_string = data.image_data_uint8
     elif cameraType == "Annotation":
         img_rgb_string = data.image_data_uint8
+
     else:
         img_rgb_string = data.image_data_uint8
     return img_rgb_string

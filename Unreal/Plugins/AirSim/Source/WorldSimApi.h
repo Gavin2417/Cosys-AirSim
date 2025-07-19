@@ -9,7 +9,6 @@
 #include "AssetRegistry/AssetData.h"
 #include "Runtime/Engine/Classes/Engine/StaticMesh.h"
 #include <string>
-#include <utility>
 
 class WorldSimApi : public msr::airlib::WorldSimApiBase
 {
@@ -66,19 +65,14 @@ public:
 
     virtual bool addVehicle(const std::string& vehicle_name, const std::string& vehicle_type, const Pose& pose, const std::string& pawn_path = "") override;
 
-    virtual bool setWorldLightVisibility(const std::string& light_name, bool is_visible = true) override;
-    virtual bool setWorldLightIntensity(const std::string& light_name, float intensity) override;
-    virtual bool setVehicleLightVisibility(const std::string& vehicle_name, const std::string& light_name, bool is_visible = true) override;
-    virtual bool setVehicleLightIntensity(const std::string& vehicle_name, const std::string& light_name, float intensity) override;
-
     virtual void printLogMessage(const std::string& message,
                                  const std::string& message_param = "", unsigned char severity = 0) override;
-    
+
+    virtual bool setLightIntensity(const std::string& light_name, float intensity) override;
     virtual std::unique_ptr<std::vector<std::string>> swapTextures(const std::string& tag, int tex_id = 0, int component_id = 0, int material_id = 0) override;
     virtual bool setObjectMaterial(const std::string& object_name, const std::string& material_name, const int component_id = 0) override;
     virtual bool setObjectMaterialFromTexture(const std::string& object_name, const std::string& texture_path, const int component_id = 0) override;
     virtual std::vector<std::string> listSceneObjects(const std::string& name_regex) const override;
-    virtual std::vector<std::pair<std::string, std::string>> listSceneObjectsTags(const std::string& name_regex) const override;
     virtual Pose getObjectPose(const std::string& object_name, bool ned = true) const override;
     virtual bool setObjectPose(const std::string& object_name, const Pose& pose, bool teleport) override;
     virtual bool runConsoleCommand(const std::string& command) override;

@@ -229,8 +229,7 @@ To change resolution, FOV etc, you can use [settings.json](settings.md). For exa
   Infrared = 7,
   OpticalFlow = 8,
   OpticalFlowVis = 9
-  Lighting = 10
-  Annotation = 11
+  Annotation = 10
 ```                
 
 ### DepthPlanar and DepthPerspective
@@ -243,7 +242,7 @@ When you specify `ImageType = DepthVis` in `ImageRequest`, you get an image that
 You normally want to retrieve disparity image as float (i.e. set `pixels_as_float = true` and specify `ImageType = DisparityNormalized` in `ImageRequest`) in which case each pixel is `(Xl - Xr)/Xmax`, which is thereby normalized to values between 0 to 1.
 
 ### Segmentation
-When you specify `ImageType = Segmentation` in `ImageRequest`, you get an image that gives you ground truth instance segmentation of the scene. At the startup, AirSim assigns a random color index to each mesh available in environment. You can disable this by setting the main parameter `InitialInstanceSegmentation` to false in the settings.json file. The RGB values for each color index ID can be retrieved from the API.
+When you specify `ImageType = Segmentation` in `ImageRequest`, you get an image that gives you ground truth instance segmentation of the scene. At the startup, AirSim assigns a random color index to each mesh available in environment. The RGB values for each color index ID can be retrieved from the API.
 
 You can assign a specific value to a specific mesh using APIs. For example, below Python code sets the object ID for the mesh called "Ground" to 20 in Blocks environment and hence changes its color in Segmentation view to the 20th color of the instance segmentation colormap:
 Note that this will not do a check if this color is already assigned to a different object! 
@@ -333,12 +332,6 @@ For example with Python, you can use the following examples for RGB and greyscal
     img = Image.fromarray(rgbarray_shaped[:,:,0])
     img.show()
 ```
-
-### Lighting
-This layer only shows lighting information and as such does not include other material information (color, normal maps, PBR material parameters, ...) in the image. 
-It shows a neutral material only affected by lighting. 
-Note that objects using transparent materials may still show their full diffuse color due to engine limitations. 
-This can be useful to indicate what parts of an image are in shadow or how much light is received on certain objects by artificial or natural light sources. 
 
 ## Lumen Lightning for Scene camera
 Unreal 5 introduces Lumen lightning. Due to the cameras using scene capture components enabling Lumen for them can be costly on performance. Settings have been added specfically for the scene camera to customize the usage of Lumen for Global Illumination and Reflections. 

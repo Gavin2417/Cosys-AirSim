@@ -66,11 +66,6 @@ namespace airlib
 
         virtual bool addVehicle(const std::string& vehicle_name, const std::string& vehicle_type, const Pose& pose, const std::string& pawn_path = "") = 0;
 
-        virtual bool setWorldLightVisibility(const std::string& light_name, bool is_visible = true) = 0;
-        virtual bool setWorldLightIntensity(const std::string& light_name, float intensity) = 0;
-        virtual bool setVehicleLightVisibility(const std::string& vehicle_name, const std::string& light_name, bool is_visible = true) = 0;
-        virtual bool setVehicleLightIntensity(const std::string& vehicle_name, const std::string& light_name, float intensity) = 0;
-
         virtual void printLogMessage(const std::string& message,
                                      const std::string& message_param = "", unsigned char severity = 0) = 0;
 
@@ -85,7 +80,6 @@ namespace airlib
         virtual void simPlotTransformsWithNames(const vector<Pose>& poses, const vector<std::string>& names, float tf_scale, float tf_thickness, float text_scale, const vector<float>& text_color_rgba, float duration) = 0;
 
         virtual std::vector<std::string> listSceneObjects(const std::string& name_regex) const = 0;
-        virtual std::vector<std::pair<std::string, std::string>> listSceneObjectsTags(const std::string& name_regex) const = 0;
         virtual std::vector<std::string> listInstanceSegmentationObjects() const = 0;
         virtual std::vector<Vector3r> getInstanceSegmentationColorMap() const = 0;
         virtual std::vector<Pose> listInstanceSegmentationPoses(bool ned = true, bool only_visible = false) const = 0;
@@ -95,6 +89,7 @@ namespace airlib
         virtual bool runConsoleCommand(const std::string& command) = 0;
         virtual bool setObjectScale(const std::string& object_name, const Vector3r& scale) = 0;
         virtual std::unique_ptr<std::vector<std::string>> swapTextures(const std::string& tag, int tex_id = 0, int component_id = 0, int material_id = 0) = 0;
+        virtual bool setLightIntensity(const std::string& light_name, float intensity) = 0;
         virtual bool setObjectMaterial(const std::string& object_name, const std::string& material_name, const int component_id = 0) = 0;
         virtual bool setObjectMaterialFromTexture(const std::string& object_name, const std::string& texture_path, const int component_id = 0) = 0;
         virtual vector<MeshPositionVertexBuffersResponse> getMeshPositionVertexBuffers() const = 0;

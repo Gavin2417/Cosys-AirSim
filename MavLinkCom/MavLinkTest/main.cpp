@@ -340,6 +340,7 @@ void ConvertLogFileToCsv(std::string logFile, int filter)
 
 void LoadInitScript(std::string fileName)
 {
+
     std::ifstream fs;
     std::string line;
     FileSystem::openTextFile(fileName, fs);
@@ -431,7 +432,6 @@ void OpenLogFiles()
         outLogFile->openForWriting(outfile, jsonLogFormat);
     }
 }
-
 void CloseLogFiles()
 {
     if (inLogFile != nullptr) {
@@ -597,6 +597,7 @@ const static FlagName CustomSubModeNames[]{
 
 void PrintFlags(const FlagName* flagNames, int value)
 {
+
     for (int i = 0;; i++) {
         if (flagNames[i].Name == NULL)
             break;
@@ -609,6 +610,7 @@ void PrintFlags(const FlagName* flagNames, int value)
 
 void PrintEnum(const FlagName* enumNames, int value)
 {
+
     for (int i = 0;; i++) {
         if (enumNames[i].Name == NULL)
             break;
@@ -654,6 +656,7 @@ void PrintCustomMode(const MavLinkHeartbeat& heartbeat)
 
 void PrintHeartbeat(const MavLinkMessage& msg)
 {
+
     MavLinkHeartbeat heartbeat;
     heartbeat.decode(msg);
 
@@ -714,7 +717,6 @@ void mavlink_quaternion_to_dcm(const float quaternion[4], float dcm[3][3])
     dcm[2][1] = static_cast<float>(2 * (a * b + c * d));
     dcm[2][2] = static_cast<float>(aSq - bSq - cSq + dSq);
 }
-
 void mavlink_dcm_to_euler(const float dcm[3][3], float* roll, float* pitch, float* yaw)
 {
     float phi, theta, psi;
@@ -740,7 +742,6 @@ void mavlink_dcm_to_euler(const float dcm[3][3], float* roll, float* pitch, floa
     *pitch = theta;
     *yaw = psi;
 }
-
 void mavlink_quaternion_to_euler(const float quaternion[4], float* roll, float* pitch, float* yaw)
 {
     float dcm[3][3];
@@ -755,7 +756,6 @@ void PrintUsage()
     printf("Usage: PX4 options\n");
     printf("Connects to PX4 either over udp or serial COM port\n");
     printf("Options: \n");
-    printf("    -h, --help                             - show this message and exit\n");
     printf("    -udp[:ipaddr[:port]]                   - connect to remote drone at this udp address (default port localhost:14550)\n");
     printf("    -tcp[:ipaddr[:port]]                   - connect to remote drone at this tcp address (default port localhost:4560)\n");
     printf("    -local[:ipaddr]                        - connect to remote drone via this local address (default localhost)\n");
@@ -769,7 +769,7 @@ void PrintUsage()
     printf("    -logformat:json                        - the default is binary .mavlink, if you specify this option you will get mavlink logs in json\n");
     printf("    -convert:[json,csv]                    - convert all existing .mavlink log files in the logdir to the specified -logformat\n");
     printf("    -filter:msid,msgid,...                 - while converting .mavlink log extract only the given mavlink message ids\n");
-    printf("    -noradio                               - disables RC link loss failsafe\n");
+    printf("    -noradio							   - disables RC link loss failsafe\n");
     printf("    -nsh                                   - enter NuttX shell immediately on connecting with PX4\n");
     printf("    -telemetry                             - generate telemetry mavlink messages for logviewer\n");
     printf("    -wifi:iface                            - add wifi rssi to the telemetry using given wifi interface name (e.g. wplsp0)\n");
@@ -777,14 +777,7 @@ void PrintUsage()
     printf("You can specify -proxy multiple times with different port numbers to proxy drone messages out to multiple listeners\n");
 }
 
-enum CLI_PARSE_RESULT
-{
-    CLI_PARSE_RESULT_OK = 1,
-    CLI_PARSE_RESULT_HELP,
-    CLI_PARSE_RESULT_BAD_ARG,
-};
-
-CLI_PARSE_RESULT ParseCommandLine(int argc, const char* argv[])
+bool ParseCommandLine(int argc, const char* argv[])
 {
     const char* logDirOption = "logdir";
     const char* logformatOption = "logformat";
@@ -884,7 +877,7 @@ CLI_PARSE_RESULT ParseCommandLine(int argc, const char* argv[])
                     else {
 
                         printf("### Error: invalid logformat '%s', expecting 'json'\n", format.c_str());
-                        return CLI_PARSE_RESULT_BAD_ARG;
+                        return false;
                     }
                 }
             }
@@ -901,7 +894,7 @@ CLI_PARSE_RESULT ParseCommandLine(int argc, const char* argv[])
                     }
                     else {
                         printf("### Error: invalid format '%s', expecting 'json'\n", format.c_str());
-                        return CLI_PARSE_RESULT_BAD_ARG;
+                        return false;
                     }
                 }
             }
@@ -917,7 +910,7 @@ CLI_PARSE_RESULT ParseCommandLine(int argc, const char* argv[])
                         }
                         catch (std::exception&) {
                             printf("expecting integer filter messagid, but found %s\n", f.c_str());
-                            return CLI_PARSE_RESULT_BAD_ARG;
+                            return false;
                         }
                     }
                 }
@@ -944,13 +937,13 @@ CLI_PARSE_RESULT ParseCommandLine(int argc, const char* argv[])
                         baudRate = atoi(parts[2].c_str());
                         if (baudRate == 0) {
                             printf("### Error: invalid baud rate in -serial argument\n");
-                            return CLI_PARSE_RESULT_BAD_ARG;
+                            return false;
                         }
                     }
                 }
             }
             else if (lower == "h" || lower == "?" || lower == "help" || lower == "-help") {
-                return CLI_PARSE_RESULT_HELP;
+                return false;
             }
             else if (lower == "noradio") {
                 noRadio = true;
@@ -978,15 +971,15 @@ CLI_PARSE_RESULT ParseCommandLine(int argc, const char* argv[])
             }
             else {
                 printf("### Error: unexpected argument: %s\n", arg);
-                return CLI_PARSE_RESULT_BAD_ARG;
+                return false;
             }
         }
         else {
             printf("### Error: unexpected argument: %s\n", arg);
-            return CLI_PARSE_RESULT_BAD_ARG;
+            return false;
         }
     }
-    return CLI_PARSE_RESULT_OK;
+    return true;
 }
 
 void HexDump(uint8_t* buffer, uint len)
@@ -1029,6 +1022,7 @@ std::shared_ptr<MavLinkConnection> connectProxy(const PortAddress& endPoint, std
 
 std::string findPixhawk()
 {
+
     auto result = MavLinkConnection::findSerialPorts(0, 0);
     for (auto iter = result.begin(); iter != result.end(); iter++) {
         SerialPortInfo info = *iter;
@@ -1165,6 +1159,7 @@ bool connect()
 
 void connectSitl(std::shared_ptr<MavLinkVehicle> mavLinkVehicle)
 {
+
     if (sitlEndPoint.port != 0) {
         sitlEndPoint.port = DEFAULT_SITL_PORT;
     }
@@ -1282,6 +1277,7 @@ void handleStatus(const MavLinkStatustext& statustext)
 
 int console(std::stringstream& script)
 {
+
     std::string line;
     std::shared_ptr<MavLinkNode> logViewer = nullptr;
     Command* currentCommand = nullptr;
@@ -1499,13 +1495,7 @@ void completion(int state)
 
 int main(int argc, const char* argv[])
 {
-    CLI_PARSE_RESULT parseResult = ParseCommandLine(argc, argv);
-    if (parseResult == CLI_PARSE_RESULT_HELP) {
-        PrintUsage();
-        return 0;
-    }
-    if (parseResult == CLI_PARSE_RESULT_BAD_ARG) {
-        std::cout << "\n";
+    if (!ParseCommandLine(argc, argv)) {
         PrintUsage();
         return 1;
     }

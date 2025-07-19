@@ -11,7 +11,7 @@ An Instance segmentation system is implemented into Cosys-AirSim. It uses Proxy 
   * These and other unsupported object types that are less common that either will not be rendered (decals, text, foliage, ...) or will by default be given the RGB color value of [149,149,149] or [0,0,0]. (brush objects, landscape,...).
 
 ## Usage
-By default, at the start of the simulation, it will give a random color to each object. You can disable this by setting the main parameter `InitialInstanceSegmentation` to false in the settings.json file.
+By default, at the start of the simulation, it will give a random color to each object. 
 Please see the [Image API documentation](image_apis.md#segmentation) on how to manually set or get the color information.
 
 For an example of the Instance Segmentation API, please see the script _segmentation_test.py_ (Cosys-Airsim/PythonClient/segmentation/segmentation_test.py).
@@ -22,8 +22,6 @@ When a new object is spawned in your environment by for example a c++ or bluepri
 and you want it to work with the instance segmentation system, you can use the extended function `ASimModeBase::AddNewActorToSegmentation(AActor)` which is also available in blueprints. 
 
 Make sure to provide human-readable names to your objects in your environment as the ground truth tables that the AirSim API can provide will use your object naming to create the table.
-
-If you want to not label specific components/meshes of an actor, you can add the Unreal Tag `InstanceSegmentation_disable` to the components/meshes you want to ignore.
 
 ## Credits
 The method used to use Proxy meshes to segment object is a derivative of and inspired by the work of [UnrealCV](https://unrealcv.org/). Their work is licensed under the MIT License.

@@ -189,10 +189,8 @@ void ALidarCamera::InitializeSettingsFromAirSim(const msr::airlib::GPULidarSimpl
 		while (std::getline(ss, word, ',')) {
 			row.push_back(word);
 		}
-		if (row.size() > 1) {
-			material_map_.emplace(stencil_index, std::stof(row[1]));
-			stencil_index = stencil_index + 1;
-		}
+		material_map_.emplace(stencil_index, std::stof(row[1]));
+		stencil_index = stencil_index + 1;
 	}
 
 	// Set the sensor in the Unreal world at the right position and rotation by transforming the coordinate system to that of Unreal from AirSim NED
@@ -272,9 +270,6 @@ void ALidarCamera::InitializeSensor()
 	capture_2D_segmentation_->HiddenActors = actors;
 	capture_2D_intensity_->HiddenActors = actors;
 
-	sensor_cur_angle_ = FMath::Fmod(horizontal_fov_min_, 360);
-	hfov_ = abs(horizontal_fov_max_ - horizontal_fov_min_);
-
 	initialized = true;
 }
 
@@ -291,24 +286,16 @@ bool ALidarCamera::Update(float delta_time, msr::airlib::vector<msr::airlib::rea
 	bool refresh_pointcloud = false;
 
 	// Calculate the added rotation of the sensor by this update based on the time that has pased and the rotational speed of the sensor
-	float sensor_rotation_angle_ = hfov_ * delta_time * sensor_rotation_frequency_;
+	float sensor_rotation_angle_ = 360 * delta_time * sensor_rotation_frequency_;
 	sensor_sum_rotation_angle_ += sensor_rotation_angle_;
 
 	// If the rotation in this frame is larger than the minimum horizontal FOV delta, a new calculation of points needs to be made
 	if (sensor_sum_rotation_angle_ > h_delta_angle_) {
 
-		// If the full horizontal fov was completed last frame, reset the starting angle again
-		if (reset_hfov_) {
-			sensor_cur_angle_ = FMath::Fmod(horizontal_fov_min_, 360);
-			sensor_prev_rotation_angle_ = 0;
-			completed_hfov_ = 0;
-			reset_hfov_ = false;
-		}
-
 		// The ideal virtual camera FOV is set based on the vertical FOV, but if it is a large rotation that has to be calculated, set it to be a even number that is equal to the
-		// rotation + 3 horizontal FOV deltas. However, to make the pixel to LiDAR laser coordinates work, the FOV needs to be a minimum of 90 degrees.
+		// rotation + 2 horizontal FOV deltas. However, to make the pixel to LiDAR laser coordinates work, the FOV needs to be a minimum of 90 degrees.
 		int32 cur_fov = target_fov_;
-		if (sensor_sum_rotation_angle_ > target_fov_) cur_fov = FMath::CeilToInt(FMath::Min(sensor_sum_rotation_angle_ + (3 * h_delta_angle_), 178.0f));
+		if (sensor_sum_rotation_angle_ > target_fov_) cur_fov = FMath::CeilToInt(FMath::Min(sensor_sum_rotation_angle_ + (2 * h_delta_angle_), 178.0f));
 		if (cur_fov % 2 != 0) cur_fov += 1;
 		if (cur_fov < 90) cur_fov = 90;
 		capture_2D_depth_->FOVAngle = cur_fov;
@@ -322,13 +309,11 @@ bool ALidarCamera::Update(float delta_time, msr::airlib::vector<msr::airlib::rea
 		// If the rotation is bigger than the allowed FOV, cap the rotation (it will be further completed in the next frame)
 		if (sensor_sum_rotation_angle_ > cur_fov)sensor_sum_rotation_angle_ = cur_fov;
 
-		// If the rotation will extend beyond the total horizontal FOV if it is not full 360, cap the rotation to the remaining FOV
-		// And also make sure to reset the start rotation next frame
-		if (sensor_sum_rotation_angle_ >= hfov_ - completed_hfov_ && hfov_ != 360) {
-			sensor_sum_rotation_angle_ = hfov_ - completed_hfov_;
-			reset_hfov_ = true;
-		}
-		completed_hfov_ += sensor_sum_rotation_angle_;
+		// Perform the camera to LiDAR pointcloud conversion
+		//if(!first_frame_){
+		//	refresh_pointcloud = SampleRenders(sensor_sum_rotation_angle_, cur_fov, point_cloud, point_cloud_final);
+		//}
+		//first_frame_ = false;
 
 		if (waited_frames_ < wait_frames_) {
 			waited_frames_++;
@@ -340,8 +325,7 @@ bool ALidarCamera::Update(float delta_time, msr::airlib::vector<msr::airlib::rea
 			capture_2D_intensity_->CaptureScene();
 			refresh_pointcloud = SampleRenders(sensor_sum_rotation_angle_, cur_fov, point_cloud, point_cloud_final);
 		}
-
-	
+		
 
 		// Set up the values for the next frame
 		sensor_prev_rotation_angle_ = sensor_sum_rotation_angle_;
@@ -365,7 +349,6 @@ void ALidarCamera::GenerateLidarCoordinates() {
 	v_angles_ = LinearSpacedArray(vertical_fov_min_, vertical_fov_max_, num_lasers_);
 	for (int32 h_cur_index = 0; h_cur_index < horizontal_samples_; h_cur_index++)
 	{
-		h_angles_atan2_.Add(FMath::Fmod(h_angles_[h_cur_index], 360));
 		float h_angle_0 = h_angles_[h_cur_index];
 		for (int32 v_cur_index = 0; v_cur_index < num_lasers_; v_cur_index++)
 		{
@@ -474,16 +457,14 @@ bool ALidarCamera::SampleRenders(float sensor_rotation_angle, float fov, msr::ai
 	// Calculate the first and last horizontal angle of the LiDAR that will be captured in this frame
 	int32 h_first_index = h_cur_atan2_index_ + 1;
 	float h_max_angle = FMath::Fmod(sensor_cur_angle_ + sensor_rotation_angle, 360);
-	int32 h_last_index = getIndexLowerClosest(h_angles_atan2_, h_max_angle);
+	int32 h_last_index = getIndexLowerClosest(h_angles_, h_max_angle);
 
 	// variable that keeps the current horizontal angle index that is being calculated
 	int32 h_cur_index = h_first_index;
 
 	// Calculate the last horizontal angle that was measured in the previous frame, used to seeing if the full pointcloud is completed
 	float h_prev_angle = 10000; // This is done to avoid an issue with the very first measurement
-	if (h_cur_atan2_index_ != -1) {
-		h_prev_angle = h_angles_[h_cur_atan2_index_];
-	}
+	if(h_cur_atan2_index_ != -1) h_prev_angle = FMath::Fmod(h_angles_[h_cur_atan2_index_], 360);
 
 	// get the current rain intensity from the AirSim API
 	float rain_value;
@@ -504,7 +485,7 @@ bool ALidarCamera::SampleRenders(float sensor_rotation_angle, float fov, msr::ai
 
 		// Get the current horizontal angle, also in Eucledian plane form (between 0 and 360 degrees)
 		float h_cur_angle = h_angles_[h_cur_atan2_index_];
-		float h_cur_atan2_angle = FMath::Fmod(FMath::Fmod(FMath::Fmod(h_cur_angle, 360) - sensor_cur_angle_, 360) - (fov / 2), 360);
+		float h_cur_atan2_angle = FMath::Fmod(h_cur_angle - sensor_cur_angle_, 360) - (fov / 2);
 
 		// Calculate the cosine and sine of the horizontal angle and calculate the pixel index from the render texture target that matches this laser's horizontal angle
 		float h_cur_angle_cos = FMath::Cos(FMath::DegreesToRadians(h_cur_atan2_angle));
@@ -518,18 +499,17 @@ bool ALidarCamera::SampleRenders(float sensor_rotation_angle, float fov, msr::ai
 		{
 			// if the previous horizontal angle was larger than the current one, it means the sensor has done a full circle and a new pointcloud can be started
 			if (used_by_airsim_) {
-				if ((h_prev_angle >h_cur_angle) && (point_cloud.size() != 0)) {
+				if ((h_prev_angle > FMath::Fmod(h_cur_angle, 360)) && (point_cloud.size() != 0)) {
 					if (v_cur_index == 0) {
 						// Check edge cases where the amount of points in the pointcloud doesnt equal the desired full pointcloud size. In this case, throw away the current data
 						if ((((int)point_cloud.size() / 5) != horizontal_samples_ * num_lasers_))
 						{
-							UE_LOG(LogTemp, Warning, TEXT("Pointcloud incorrect size! points:%i %f %f"), (int)(point_cloud.size() / 5), h_prev_angle, h_cur_angle);
+							UE_LOG(LogTemp, Warning, TEXT("Pointcloud incorrect size! points:%i %f %f"), (int)(point_cloud.size() / 5), h_prev_angle, FMath::Fmod(h_cur_angle, 360));
 							point_cloud.clear();
 							refresh_pointcloud = false;
 						}
 						// Else, save the completed pointcloud into the right array and clear the current one
 						else {
-							//UE_LOG(LogTemp, Warning, TEXT("REFRESH at angle: %f, with prev angle: %f"), h_cur_angle, h_prev_angle);
 							point_cloud_final = point_cloud;
 							point_cloud.clear();
 							refresh_pointcloud = true;
@@ -657,8 +637,8 @@ bool ALidarCamera::SampleRenders(float sensor_rotation_angle, float fov, msr::ai
 				}
 			}
 			else {
-				//if (h_pixel >= resolution_ || h_pixel < 0)UE_LOG(LogTemp, Warning, TEXT("Point H index out of bounds: %i"), h_pixel);
-				//if (v_pixel >= resolution_ || v_pixel < 0)UE_LOG(LogTemp, Warning, TEXT("Point V index out of bounds: %i"), v_pixel);
+				if (h_pixel >= resolution_ || h_pixel < 0)UE_LOG(LogTemp, Warning, TEXT("Point H index out of bounds: %i"), h_pixel);
+				if (v_pixel >= resolution_ || v_pixel < 0)UE_LOG(LogTemp, Warning, TEXT("Point V index out of bounds: %i"), v_pixel);
 				if (used_by_airsim_) {
 					point_cloud.emplace_back(0);
 					point_cloud.emplace_back(0);
@@ -670,7 +650,7 @@ bool ALidarCamera::SampleRenders(float sensor_rotation_angle, float fov, msr::ai
 		}
 
 		// Set the variables right for the next horizontal angle
-		h_prev_angle = h_cur_angle;
+		h_prev_angle = FMath::Fmod(h_cur_angle, 360);
 		h_cur_index += 1;
 	}
 	return refresh_pointcloud;

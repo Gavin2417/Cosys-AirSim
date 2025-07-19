@@ -6,7 +6,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 pushd "$SCRIPT_DIR" >/dev/null
 
 downloadHighPolySuv=true
-MIN_CMAKE_VERSION=3.12.0
+MIN_CMAKE_VERSION=3.10.0
 function version_less_than_equal_to() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" = "$1"; }
 
 # brew gives error if package is already installed
@@ -48,25 +48,7 @@ else #linux
     #     wget -O - http://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
     #     sudo apt-get update
     # fi
-    if [ "$VERSION" -eq "20" ]; then
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-        sudo apt update
-        sudo apt-get install -y build-essential cmake clang clang-12 clang++-12 libc++-12-dev libc++abi-12-dev libstdc++-13-dev
-
-        # configure update-alternatives for clang
-        sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-12 1000
-        sudo update-alternatives --install /usr/bin/clang   clang   /usr/bin/clang-12   1000
-        sudo update-alternatives --install /usr/bin/ld.lld  ld.lld  /usr/bin/ld.lld-12  1000
-        sudo update-alternatives --install /usr/bin/cc      cc      /usr/bin/clang++-12 1000
-    fi
-    if [ "$VERSION" -eq "22" ]; then
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-        sudo apt update
-        sudo apt-get install -y build-essential cmake clang clang-14 clang++-14 libc++-14-dev libc++abi-14-dev libstdc++-13-dev
-    fi
-    if [ "$VERSION" -eq "24" ]; then
-        sudo apt-get install -y build-essential cmake clang clang-18 clang++-18 libc++-18-dev libc++abi-18-dev libstdc++-13-dev
-    fi
+    sudo apt-get install -y clang-12 clang++-12 libc++-12-dev libc++abi-12-dev libstdc++-12-dev
 fi
 
 if ! which cmake; then
@@ -104,7 +86,7 @@ else #linux
     fi
 
     # install additional tools
-    sudo apt-get install -y unzip
+    sudo apt-get install -y build-essential unzip libunwind-dev
 
     if version_less_than_equal_to $cmake_ver $MIN_CMAKE_VERSION; then
         # in ubuntu 18 docker CI, avoid building cmake from scratch to save time
@@ -192,7 +174,7 @@ echo "Installing Eigen library..."
 
 if [ ! -d "AirLib/deps/eigen3" ]; then
     echo "Downloading Eigen..."
-    wget -O eigen3.zip https://github.com/WouterJansen/eigen/archive/refs/tags/3.4.1r.zip
+    wget -O eigen3.zip https://github.com/WouterJansen/eigen/archive/refs/tags/3.4.1.zip
     unzip -q eigen3.zip -d temp_eigen
     mkdir -p AirLib/deps/eigen3
     mv temp_eigen/eigen*/Eigen AirLib/deps/eigen3

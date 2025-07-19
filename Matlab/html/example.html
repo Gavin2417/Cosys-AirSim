@@ -9,7 +9,7 @@ To make changes, update the MATLAB code and republish this document.
 <title>Example</title>
 <meta name="generator" content="MATLAB 24.1">
 <link rel="schema.DC" href="http://purl.org/dc/elements/1.1/">
-<meta name="DC.date" content="2024-10-01">
+<meta name="DC.date" content="2024-06-14">
 <meta name="DC.source" content="example.m">
 <style type="text/css">
 html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
@@ -78,7 +78,6 @@ table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px soli
 <div class="content">
 <h1>Example</h1>
 <!--introduction-->
-<p>This example works well with the default example settings found in the docs folder op the repository.</p>
 <p>This example will: -Connect to AirSim -Get/set vehicle pose -Get instance segmentation groundtruth table -Get object pose(s) -Get sensor data (imu, echo (active/passive), (gpu)LiDAR, camera (info, rgb, depth, segmentation, annotation))</p>
 <p>Do note that the AirSim matlab client has almost all API functions available but not all are listed in this test script. For a full list see the source code fo the AirSimClient class.</p>
 <p>Do note the test script requires next to the toolboxes listed in the Prerequisites the following Matlab toolboxes: -Lidar Toolbox -Navigation Toolbox -Robotics System Toolbox -ROS Toolbox -UAV Toolbox</p>
@@ -108,13 +107,7 @@ table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px soli
 <a href="#7">GPU LiDAR sensor data</a>
 </li>
 <li>
-<a href="#8">Get camera info</a>
-</li>
-<li>
-<a href="#9">Get single camera images</a>
-</li>
-<li>
-<a href="#10">Get synced camera images</a>
+<a href="#8">Cameras</a>
 </li>
 </ul>
 </div>
@@ -122,7 +115,7 @@ table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px soli
 <pre class="codeinput">
 <span class="comment">%Define client</span>
 vehicle_name = <span class="string">"airsimvehicle"</span>;
-airSimClient = AirSimClient(IsDrone=false, IP=<span class="string">"127.0.0.1"</span>, port=41451);
+airSimClient = AirSimClient(IsDrone=false, ApiControl=false, IP=<span class="string">"127.0.0.1"</span>, port=41451, vehicleName=vehicle_name);
 </pre>
 <h2 id="2">Groundtruth labels</h2>
 <p>Get groundtruth look-up-table of all objects and their instance segmentation colors for the cameras and GPU LiDAR</p>
@@ -136,15 +129,23 @@ airSimClient = AirSimClient(IsDrone=false, IP=<span class="string">"127.0.0.1"</
 poses = airSimClient.getAllObjectPoses(false, false);
 
 <span class="comment">% Get vehicle pose</span>
-vehiclePoseLocal = airSimClient.getVehiclePose(vehicle_name);
+vehiclePoseLocal = airSimClient.getVehiclePose();
 vehiclePoseWorld = airSimClient.getObjectPose(vehicle_name, false);
 
-<span class="comment">% Choose the object to get the pose from (this one is in the Blocks env)</span>
+<span class="comment">% Get an random object pose or choose if you know the name of one</span>
+useChosenObject = false;
 chosenObject = <span class="string">"Cylinder3"</span>;
 
-<span class="comment">% Get its pose</span>
-objectPoseLocal = airSimClient.getObjectPose(chosenObject, true);
-objectPoseWorld = airSimClient.getObjectPose(chosenObject, false);
+<span class="keyword">if</span> useChosenObject
+    finalName = chosenObject;
+<span class="keyword">else</span>
+    randomIndex = randi(size(groundtruthLUT, 1), 1);
+    randomName = groundtruthLUT.name(randomIndex);
+    finalName = randomName;
+<span class="keyword">end</span>
+
+objectPoseLocal = airSimClient.getObjectPose(finalName, true);
+objectPoseWorld = airSimClient.getObjectPose(finalName, false);
 
 figure;
 subplot(1, 2, 1);
@@ -168,32 +169,17 @@ title(<span class="string">"World Plot"</span>)
 drawnow
 
 <span class="comment">% Set vehicle pose</span>
-airSimClient.setVehiclePose(airSimClient.getVehiclePose(vehicle_name).position + [1 1 0], airSimClient.getVehiclePose(vehicle_name).orientation, false, vehicle_name)
+airSimClient.setVehiclePose(airSimClient.getVehiclePose().position + [1 1 0], airSimClient.getVehiclePose().orientation)
 </pre>
 <img vspace="5" hspace="5" src="example_01.png" alt=""> <h2 id="4">IMU sensor Data</h2>
 <pre class="codeinput">imuSensorName = <span class="string">"imu"</span>;
-[imuData, imuTimestamp] = airSimClient.getIMUData(imuSensorName, vehicle_name)
-</pre>
-<pre class="codeoutput">
-imuData = 
-
-  struct with fields:
-
-           orientation: [1.0000 5.9864e-05 -0.0029 0.0012]
-       angularVelocity: [0 0 0]
-    linearAcceleration: [0.0560 -0.0012 9.8065]
-
-
-imuTimestamp =
-
-   1.7278e+09
-
+[imuData, imuTimestamp] = airSimClient.getIMUData(imuSensorName);
 </pre>
 <h2 id="5">Echo sensor data</h2>
 <p>Example plots passive echo pointcloud and its reflection directions as 3D quivers</p>
 <pre class="codeinput">echoSensorName = <span class="string">"echo"</span>;
 enablePassive = true;
-[activePointCloud, activeData, passivePointCloud, passiveData , echoTimestamp, echoSensorPose] = airSimClient.getEchoData(echoSensorName, enablePassive, vehicle_name);
+[activePointCloud, activeData, passivePointCloud, passiveData , echoTimestamp, echoSensorPose] = airSimClient.getEchoData(echoSensorName, enablePassive);
 
 figure;
 subplot(1, 2, 1);
@@ -233,7 +219,7 @@ drawnow
 <p>Example plots lidar pointcloud and getting the groundtruth labels</p>
 <pre class="codeinput">lidarSensorName = <span class="string">"lidar"</span>;
 enableLabels = true;
-[lidarPointCloud, lidarLabels, LidarTimestamp, LidarSensorPose] = airSimClient.getLidarData(lidarSensorName, enableLabels, vehicle_name);
+[lidarPointCloud, lidarLabels, LidarTimestamp, LidarSensorPose] = airSimClient.getLidarData(lidarSensorName, enableLabels);
 
 figure;
 <span class="keyword">if</span> ~isempty(lidarPointCloud)
@@ -254,7 +240,7 @@ drawnow
 <p>Example plots GPU lidar pointcloud with its RGB segmentation colors</p>
 <pre class="codeinput">gpuLidarSensorName = <span class="string">"gpulidar"</span>;
 enableLabels = true;
-[gpuLidarPointCloud, gpuLidarTimestamp, gpuLidarSensorPose] = airSimClient.getGPULidarData(gpuLidarSensorName, vehicle_name);
+[gpuLidarPointCloud, gpuLidarTimestamp, gpuLidarSensorPose] = airSimClient.getGPULidarData(gpuLidarSensorName);
 
 figure;
 <span class="keyword">if</span> ~isempty(gpuLidarPointCloud)
@@ -271,17 +257,20 @@ ylim([-10 10])
 zlim([-10 10])
 drawnow
 </pre>
-<img vspace="5" hspace="5" src="example_04.png" alt=""> <h2 id="8">Get camera info</h2>
-<pre class="codeinput">cameraSensorName = <span class="string">"frontcamera"</span>;
-[intrinsics, cameraSensorPose] = airSimClient.getCameraInfo(cameraSensorName, vehicle_name);
-</pre>
-<h2 id="9">Get single camera images</h2>
-<p>Get images sequentially</p>
-<pre class="codeinput">cameraSensorName = <span class="string">"front_center"</span>;
-[rgbImage, rgbCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Scene, vehicle_name);
-[segmentationImage, segmentationCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Segmentation,vehicle_name);
-[depthImage, depthCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.DepthPlanar,vehicle_name);
-[annotationImage, annotationCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Annotation, vehicle_name, <span class="string">"TextureTestDirect"</span>);
+<img vspace="5" hspace="5" src="example_04.png" alt=""> <h2 id="8">Cameras</h2>
+<pre class="codeinput">
+<span class="comment">% Get camera info</span>
+cameraSensorName = <span class="string">"frontcamera"</span>;
+[intrinsics, cameraSensorPose] = airSimClient.getCameraInfo(cameraSensorName);
+
+<span class="comment">% Get single camera images</span>
+<span class="comment">% Get images sequentially</span>
+
+cameraSensorName = <span class="string">"front_center"</span>;
+[rgbImage, rgbCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Scene);
+[segmentationImage, segmentationCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Segmentation);
+[depthImage, depthCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.DepthPlanar);
+[annotationImage, annotationCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Annotation, <span class="string">"TextureTestDirect"</span>);
 figure;
 subplot(4, 1, 1);
 imshow(rgbImage)
@@ -296,13 +285,15 @@ subplot(4, 1, 4);
 imshow(annotationImage)
 title(<span class="string">"Annotation Camera Image"</span>)
 drawnow
-</pre>
-<img vspace="5" hspace="5" src="example_05.png" alt=""> <img vspace="5" hspace="5" src="example_06.png" alt=""> <h2 id="10">Get synced camera images</h2>
-<p>By combining the image requests they will be synced and taken in the same frame</p>
-<pre class="codeinput">cameraSensorName = <span class="string">"front_center"</span>;
+
+<span class="comment">% Get synced camera images</span>
+<span class="comment">% By combining the image requests they will be synced</span>
+<span class="comment">% and taken in the same frame</span>
+
+cameraSensorName = <span class="string">"front_center"</span>;
 [images, cameraIimestamp] = airSimClient.getCameraImages(cameraSensorName, <span class="keyword">...</span>
                                                          [AirSimCameraTypes.Scene, AirSimCameraTypes.Segmentation, AirSimCameraTypes.DepthPlanar, AirSimCameraTypes.Annotation], <span class="keyword">...</span>
-                                                         vehicle_name, [<span class="string">""</span>, <span class="string">""</span>, <span class="string">""</span>, <span class="string">"TextureTestDirect"</span>]);
+                                                         [<span class="string">""</span>, <span class="string">""</span>, <span class="string">""</span>, <span class="string">"GreyscaleTest"</span>]);
 figure;
 subplot(4, 1, 1);
 imshow(images{1})
@@ -318,10 +309,7 @@ imshow(images{4})
 title(<span class="string">"Synced Annotation Camera Image"</span>)
 drawnow
 </pre>
-<pre class="codeoutput">Exception "java.lang.ClassNotFoundException: com/intellij/openapi/editor/RawText"while constructing DataFlavor for: application/x-java-jvm-local-objectref; class=com.intellij.openapi.editor.RawText
-Exception "java.lang.ClassNotFoundException: com/intellij/openapi/editor/RawText"while constructing DataFlavor for: application/x-java-jvm-local-objectref; class=com.intellij.openapi.editor.RawText
-</pre>
-<img vspace="5" hspace="5" src="example_07.png" alt=""> <p class="footer">
+<img vspace="5" hspace="5" src="example_05.png" alt=""> <img vspace="5" hspace="5" src="example_06.png" alt=""> <img vspace="5" hspace="5" src="example_07.png" alt=""> <p class="footer">
 <br>
 <a href="https://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2024a</a>
 <br>
@@ -330,9 +318,6 @@ Exception "java.lang.ClassNotFoundException: com/intellij/openapi/editor/RawText
 <!--
 ##### SOURCE BEGIN #####
 %% Example
-%
-% This example works well with the default example settings found in the docs folder op the repository. 
-%
 % This example will:
 %   -Connect to AirSim
 %   -Get/set vehicle pose
@@ -354,7 +339,7 @@ Exception "java.lang.ClassNotFoundException: com/intellij/openapi/editor/RawText
 
 %Define client
 vehicle_name = "airsimvehicle";
-airSimClient = AirSimClient(IsDrone=false, IP="127.0.0.1", port=41451);
+airSimClient = AirSimClient(IsDrone=false, ApiControl=false, IP="127.0.0.1", port=41451, vehicleName=vehicle_name);
 
 %% Groundtruth labels
 % Get groundtruth look-up-table of all objects and their instance
@@ -370,15 +355,23 @@ groundtruthLUT = airSimClient.getInstanceSegmentationLUT();
 poses = airSimClient.getAllObjectPoses(false, false);
 
 % Get vehicle pose
-vehiclePoseLocal = airSimClient.getVehiclePose(vehicle_name);
+vehiclePoseLocal = airSimClient.getVehiclePose();
 vehiclePoseWorld = airSimClient.getObjectPose(vehicle_name, false);
 
-% Choose the object to get the pose from (this one is in the Blocks env)
+% Get an random object pose or choose if you know the name of one
+useChosenObject = false;
 chosenObject = "Cylinder3";
 
-% Get its pose
-objectPoseLocal = airSimClient.getObjectPose(chosenObject, true);
-objectPoseWorld = airSimClient.getObjectPose(chosenObject, false);
+if useChosenObject
+    finalName = chosenObject;
+else
+    randomIndex = randi(size(groundtruthLUT, 1), 1);
+    randomName = groundtruthLUT.name(randomIndex);
+    finalName = randomName;
+end
+
+objectPoseLocal = airSimClient.getObjectPose(finalName, true);
+objectPoseWorld = airSimClient.getObjectPose(finalName, false);
 
 figure;
 subplot(1, 2, 1);
@@ -402,11 +395,11 @@ title("World Plot")
 drawnow
 
 % Set vehicle pose
-airSimClient.setVehiclePose(airSimClient.getVehiclePose(vehicle_name).position + [1 1 0], airSimClient.getVehiclePose(vehicle_name).orientation, false, vehicle_name)
+airSimClient.setVehiclePose(airSimClient.getVehiclePose().position + [1 1 0], airSimClient.getVehiclePose().orientation)
 
 %% IMU sensor Data
 imuSensorName = "imu";
-[imuData, imuTimestamp] = airSimClient.getIMUData(imuSensorName, vehicle_name)
+[imuData, imuTimestamp] = airSimClient.getIMUData(imuSensorName);
 
 %% Echo sensor data
 % Example plots passive echo pointcloud
@@ -414,7 +407,7 @@ imuSensorName = "imu";
 
 echoSensorName = "echo";
 enablePassive = true;
-[activePointCloud, activeData, passivePointCloud, passiveData , echoTimestamp, echoSensorPose] = airSimClient.getEchoData(echoSensorName, enablePassive, vehicle_name);
+[activePointCloud, activeData, passivePointCloud, passiveData , echoTimestamp, echoSensorPose] = airSimClient.getEchoData(echoSensorName, enablePassive);
 
 figure;
 subplot(1, 2, 1);
@@ -455,7 +448,7 @@ drawnow
 
 lidarSensorName = "lidar";
 enableLabels = true;
-[lidarPointCloud, lidarLabels, LidarTimestamp, LidarSensorPose] = airSimClient.getLidarData(lidarSensorName, enableLabels, vehicle_name);
+[lidarPointCloud, lidarLabels, LidarTimestamp, LidarSensorPose] = airSimClient.getLidarData(lidarSensorName, enableLabels);
 
 figure;
 if ~isempty(lidarPointCloud)
@@ -477,7 +470,7 @@ drawnow
 
 gpuLidarSensorName = "gpulidar";
 enableLabels = true;
-[gpuLidarPointCloud, gpuLidarTimestamp, gpuLidarSensorPose] = airSimClient.getGPULidarData(gpuLidarSensorName, vehicle_name);
+[gpuLidarPointCloud, gpuLidarTimestamp, gpuLidarSensorPose] = airSimClient.getGPULidarData(gpuLidarSensorName);
 
 figure;
 if ~isempty(gpuLidarPointCloud)
@@ -494,19 +487,20 @@ ylim([-10 10])
 zlim([-10 10])
 drawnow
 
-%% Get camera info
+%% Cameras
 
+% Get camera info
 cameraSensorName = "frontcamera";
-[intrinsics, cameraSensorPose] = airSimClient.getCameraInfo(cameraSensorName, vehicle_name);
+[intrinsics, cameraSensorPose] = airSimClient.getCameraInfo(cameraSensorName);
 
-%% Get single camera images
+% Get single camera images
 % Get images sequentially 
 
 cameraSensorName = "front_center";
-[rgbImage, rgbCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Scene, vehicle_name);
-[segmentationImage, segmentationCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Segmentation,vehicle_name);
-[depthImage, depthCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.DepthPlanar,vehicle_name);
-[annotationImage, annotationCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Annotation, vehicle_name, "TextureTestDirect");
+[rgbImage, rgbCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Scene);
+[segmentationImage, segmentationCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Segmentation);
+[depthImage, depthCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.DepthPlanar);
+[annotationImage, annotationCameraIimestamp] = airSimClient.getCameraImage(cameraSensorName, AirSimCameraTypes.Annotation, "TextureTestDirect");
 figure;
 subplot(4, 1, 1);
 imshow(rgbImage)
@@ -522,13 +516,14 @@ imshow(annotationImage)
 title("Annotation Camera Image")
 drawnow
 
-%% Get synced camera images
-% By combining the image requests they will be synced and taken in the same frame
+% Get synced camera images
+% By combining the image requests they will be synced 
+% and taken in the same frame
 
 cameraSensorName = "front_center";
 [images, cameraIimestamp] = airSimClient.getCameraImages(cameraSensorName, ...
                                                          [AirSimCameraTypes.Scene, AirSimCameraTypes.Segmentation, AirSimCameraTypes.DepthPlanar, AirSimCameraTypes.Annotation], ...
-                                                         vehicle_name, ["", "", "", "TextureTestDirect"]);
+                                                         ["", "", "", "GreyscaleTest"]);
 figure;
 subplot(4, 1, 1);
 imshow(images{1})

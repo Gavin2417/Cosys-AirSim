@@ -89,21 +89,7 @@ void FObjectAnnotator::getPaintableComponentMeshes(AActor* actor, TMap<FString, 
 					}
 				}
 				else {
-					if (staticmesh_component->GetStaticMesh() != nullptr) {
-						FString component_name = staticmesh_component->GetStaticMesh()->GetName();
-						component_name.Append("_");
-						component_name.Append(FString::FromInt(0));
-						component_name.Append("_");
-						if (actor->GetRootComponent()->GetAttachParent()) {
-							component_name.Append(actor->GetRootComponent()->GetAttachParent()->GetName());
-							component_name.Append("_");
-						}
-						component_name.Append(actor->GetName());
-						paintable_components_meshes->Emplace(component_name, component);
-					}
-					else {
-						paintable_components_meshes->Emplace(actor->GetName(), component);
-					}					
+					paintable_components_meshes->Emplace(actor->GetName(), component);
 				}
 			}
 			if (USkinnedMeshComponent* SkinnedMeshComponent = Cast<USkinnedMeshComponent>(component)) {
@@ -164,30 +150,11 @@ void FObjectAnnotator::getPaintableComponentMeshesAndTags(AActor* actor, TMap<FS
 					}
 				}
 				else {
-					if (staticmesh_component->GetStaticMesh() != nullptr) {
-						FString component_name = staticmesh_component->GetStaticMesh()->GetName();
-						component_name.Append("_");
-						component_name.Append(FString::FromInt(0));
-						component_name.Append("_");
-						if (actor->GetRootComponent()->GetAttachParent()) {
-							component_name.Append(actor->GetRootComponent()->GetAttachParent()->GetName());
-							component_name.Append("_");
-						}
-						component_name.Append(actor->GetName());
-						paintable_components_meshes->Emplace(component_name, component);
-						if (actor->Tags.Num() > 0)
-							paintable_components_tags->Emplace(component_name, actor->Tags);
-						else
-							paintable_components_tags->Emplace(component_name, staticmesh_component->ComponentTags);
-					}
-					else {
-						paintable_components_meshes->Emplace(actor->GetName(), component);
-						if (actor->Tags.Num() > 0)
-							paintable_components_tags->Emplace(actor->GetName(), actor->Tags);
-						else
-							paintable_components_tags->Emplace(actor->GetName(), staticmesh_component->ComponentTags);
-					}
-			
+					if (actor->Tags.Num() > 0)
+						paintable_components_tags->Emplace(actor->GetName(), actor->Tags);
+					else
+						paintable_components_tags->Emplace(actor->GetName(), staticmesh_component->ComponentTags);
+					paintable_components_meshes->Emplace(actor->GetName(), component);
 				}
 			}
 			if (USkinnedMeshComponent* SkinnedMeshComponent = Cast<USkinnedMeshComponent>(component)) {
@@ -443,8 +410,7 @@ bool FObjectAnnotator::AnnotateNewActor(AActor* actor)
 bool FObjectAnnotator::AnnotateNewActorInstanceSegmentation(AActor* actor) {
 	if (actor && IsPaintable(actor)) {
 		TMap<FString, UMeshComponent*> paintable_components_meshes;
-		TMap<FString, TArray<FName>> paintable_components_tags;
-		getPaintableComponentMeshesAndTags(actor, &paintable_components_meshes, &paintable_components_tags);
+		getPaintableComponentMeshes(actor, &paintable_components_meshes);
 		for (auto it = paintable_components_meshes.CreateConstIterator(); it; ++it)
 		{
 			if (name_to_component_map_.Contains(it.Key())) {
@@ -452,26 +418,18 @@ bool FObjectAnnotator::AnnotateNewActorInstanceSegmentation(AActor* actor) {
 				check(UpdatePaintRGBComponent(it.Value(), Color, it.Key()));
 			}
 			else {
-				FName* found_tag = paintable_components_tags[it.Key()].FindByPredicate([this](const FName& tagFName) {
-					FString tag = tagFName.ToString();
-					return tag.Contains("InstanceSegmentation_disable");
-					});
-				if (found_tag == nullptr) {
-					uint32 ObjectIndex = name_to_component_map_.Num();
-					name_to_component_map_.Emplace(it.Key(), it.Value());
-					component_to_name_map_.Emplace(it.Value(), it.Key());
-					FColor new_color = ColorGenerator_.GetColorFromColorMap(ObjectIndex);
-					name_to_color_index_map_.Emplace(it.Key(), ObjectIndex);
-					FString color_string = FString::FromInt(new_color.R) + "," + FString::FromInt(new_color.G) + "," + FString::FromInt(new_color.B);
-					FString color_string_gammacorrected = FString::FromInt(ColorGenerator_.GetGammaCorrectedColor(new_color.R)) + "," + FString::FromInt(ColorGenerator_.GetGammaCorrectedColor(new_color.G)) + "," + FString::FromInt(ColorGenerator_.GetGammaCorrectedColor(new_color.B));
-					name_to_gammacorrected_color_map_.Emplace(it.Key(), color_string_gammacorrected);
-					color_to_name_map_.Emplace(color_string, it.Key());
-					gammacorrected_color_to_name_map_.Emplace(color_string_gammacorrected, it.Key());
-					check(PaintRGBComponent(it.Value(), new_color, it.Key()));
-					UE_LOG(LogTemp, Log, TEXT("AirSim Annotation [%s]: Added new object %s with ID # %s (RGB: %s)"), *name_, *it.Key(), *FString::FromInt(ObjectIndex), *color_string_gammacorrected);
-				}else{
-					UE_LOG(LogTemp, Log, TEXT("AirSim Annotation [%s]: Ignored new object %s"), *name_, *it.Key());
-				}
+				uint32 ObjectIndex = name_to_component_map_.Num();
+				name_to_component_map_.Emplace(it.Key(), it.Value());
+				component_to_name_map_.Emplace(it.Value(), it.Key());
+				FColor new_color = ColorGenerator_.GetColorFromColorMap(ObjectIndex);
+				name_to_color_index_map_.Emplace(it.Key(), ObjectIndex);
+				FString color_string = FString::FromInt(new_color.R) + "," + FString::FromInt(new_color.G) + "," + FString::FromInt(new_color.B);
+				FString color_string_gammacorrected = FString::FromInt(ColorGenerator_.GetGammaCorrectedColor(new_color.R)) + "," + FString::FromInt(ColorGenerator_.GetGammaCorrectedColor(new_color.G)) + "," + FString::FromInt(ColorGenerator_.GetGammaCorrectedColor(new_color.B));
+				name_to_gammacorrected_color_map_.Emplace(it.Key(), color_string_gammacorrected);
+				color_to_name_map_.Emplace(color_string, it.Key());
+				gammacorrected_color_to_name_map_.Emplace(color_string_gammacorrected, it.Key());
+				check(PaintRGBComponent(it.Value(), new_color, it.Key()));
+				UE_LOG(LogTemp, Log, TEXT("AirSim Annotation [%s]: Added new object %s with ID # %s (RGB: %s)"), *name_, *it.Key(), *FString::FromInt(ObjectIndex), *color_string_gammacorrected);
 			}
 		}
 		return true;

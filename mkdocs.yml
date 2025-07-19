@@ -15,11 +15,9 @@ nav:
     - "Home": 'README.md'
   - "Changelog": 'https://github.com/Cosys-Lab/Cosys-AirSim/blob/main/CHANGELOG.md'
   - "Installing AirSim":
-    - "Download and run": 'run_packaged.md'
     - "Download and install from precompiled plugin": 'install_precompiled.md'
     - "Install from Source on Windows": 'install_windows.md'
     - "Install from Source on Linux": 'install_linux.md'
-    - "Using Docker on Ubuntu": 'docker_ubuntu.md'
     - "Custom Unreal Environment": 'unreal_custenv.md'
     - "Dynamic Objects": 'dynamic_objects.md'
   - "Using AirSim":
@@ -39,7 +37,6 @@ nav:
     - "Import Gazebo models": "gazebo_drone.md"
     - "Domain Randomization": "retexturing.md"
     - "Mesh Vertex Buffers": "meshes.md"
-    - "Artificial Lights": 'lights.md'
     - "Sensors":
       - "Sensors": 'sensors.md'
       - "LIDAR": 'lidar.md'
@@ -90,9 +87,9 @@ nav:
     - "AirSim with MAVROS and PX4": 'https://youtu.be/ZonkdMcwXH4'
   - "Misc":
     - "AirSim on Real Drones": 'custom_drone.md'
+    - "Installing cmake on Linux": 'cmake_linux.md'
     - "pfm format": 'pfm.md'
     - "Setting up Unreal Environment": 'unreal_proj.md'
-    - "Building and Packaging Cosys-AirSim Plugin and/or Unreal Projects": 'packaging.md'
     - "Blocks Environment": 'unreal_blocks.md'
     - "Working with UE Plugin Contents": 'working_with_plugin_contents.md'
     - "Formula Student Technion Self-drive": 'https://github.com/Microsoft/AirSim/wiki/technion'

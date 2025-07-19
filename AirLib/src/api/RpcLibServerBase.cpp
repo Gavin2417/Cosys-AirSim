@@ -93,11 +93,11 @@ namespace airlib
         pimpl_->server.bind("ping", [&]() -> bool { return true; });
 
         pimpl_->server.bind("getServerVersion", []() -> int {
-            return 4;
+            return 3;
         });
 
         pimpl_->server.bind("getMinRequiredClientVersion", []() -> int {
-            return 4;
+            return 3;
         });
 
         pimpl_->server.bind("simPause", [&](bool is_paused) -> void {
@@ -122,26 +122,10 @@ namespace airlib
 
         pimpl_->server.bind("simEnableWeather", [&](bool enable) -> void {
             getWorldSimApi()->enableWeather(enable);
-        });        
+        });
 
         pimpl_->server.bind("simSetWeatherParameter", [&](WorldSimApiBase::WeatherParameter param, float val) -> void {
             getWorldSimApi()->setWeatherParameter(param, val);
-        });
-        
-        pimpl_->server.bind("simSetWorldLightVisibility", [&](const string& light_name, bool is_visible) -> bool {
-            return getWorldSimApi()->setWorldLightVisibility(light_name, is_visible);
-        });
-
-        pimpl_->server.bind("simSetWorldLightIntensity", [&](const string& light_name, float intensity) -> bool {
-            return getWorldSimApi()->setWorldLightIntensity(light_name, intensity);
-        });
-
-        pimpl_->server.bind("simSetVehicleLightVisibility", [&](const string& vehicle_name, const string& light_name, bool is_visible) -> bool {
-            return getWorldSimApi()->setVehicleLightVisibility(vehicle_name, light_name, is_visible);
-        });
-
-        pimpl_->server.bind("simSetVehicleLightIntensity", [&](const string& vehicle_name, const string& light_name, float intensity) -> bool {
-            return getWorldSimApi()->setVehicleLightIntensity(vehicle_name, light_name, intensity);
         });
 
         pimpl_->server.bind("enableApiControl", [&](bool is_enabled, const std::string& vehicle_name) -> void {
@@ -440,10 +424,6 @@ namespace airlib
             return getWorldSimApi()->listSceneObjects(name_regex);
         });
 
-        pimpl_->server.bind("simListSceneObjectsTags", [&](const std::string& name_regex) -> std::vector<std::pair<std::string, std::string>> {
-            return getWorldSimApi()->listSceneObjectsTags(name_regex);
-        });
-
         pimpl_->server.bind("simLoadLevel", [&](const std::string& level_name) -> bool {
             return getWorldSimApi()->loadLevel(level_name);
         });
@@ -548,15 +528,6 @@ namespace airlib
             getVehicleSimApi(vehicle_name)->setKinematics(state.to(), ignore_collision);
         });
 
-        pimpl_->server.bind("simGetPhysicsRawKinematics", [&](const std::string& vehicle_name) -> RpcLibAdaptorsBase::KinematicsState {
-            const Kinematics::State result = getVehicleSimApi(vehicle_name)->getPhysicsRawKinematics();
-            return RpcLibAdaptorsBase::KinematicsState(result);
-        });
-
-        pimpl_->server.bind("simSetPhysicsRawKinematics", [&](const RpcLibAdaptorsBase::KinematicsState& state, const std::string& vehicle_name) {
-            getVehicleSimApi(vehicle_name)->setPhysicsRawKinematics(state.to());
-        });
-
         pimpl_->server.bind("simGetGroundTruthEnvironment", [&](const std::string& vehicle_name) -> RpcLibAdaptorsBase::EnvironmentState {
             const Environment::State& result = (*getVehicleSimApi(vehicle_name)->getGroundTruthEnvironment()).getState();
             return RpcLibAdaptorsBase::EnvironmentState(result);
@@ -565,7 +536,11 @@ namespace airlib
         pimpl_->server.bind("simCreateVoxelGrid", [&](const RpcLibAdaptorsBase::Vector3r& position, const int& x, const int& y, const int& z, const float& res, const std::string& output_file) -> bool {
             return getWorldSimApi()->createVoxelGrid(position.to(), x, y, z, res, output_file);
         });
-        
+
+        pimpl_->server.bind("simSetLightIntensity", [&](const std::string& light_name, float intensity) -> bool {
+            return getWorldSimApi()->setLightIntensity(light_name, intensity);
+        });
+
         pimpl_->server.bind("getUWBData", [&](const std::string& sensor_name, const std::string& vehicle_name) -> RpcLibAdaptorsBase::MarLocUwbReturnMessage {
             const auto& marLocUwbReturnMessage = getVehicleApi(vehicle_name)->getUWBData(sensor_name);
             return RpcLibAdaptorsBase::MarLocUwbReturnMessage(marLocUwbReturnMessage);

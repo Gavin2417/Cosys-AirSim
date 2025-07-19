@@ -174,6 +174,22 @@ AActor* WorldSimApi::createNewBPActor(const FActorSpawnParameters& spawn_params,
     return new_actor;
 }
 
+bool WorldSimApi::setLightIntensity(const std::string& light_name, float intensity)
+{
+    bool result = false;
+    UAirBlueprintLib::RunCommandOnGameThread([this, &light_name, &intensity, &result]() {
+        AActor* light_actor = simmode_->scene_object_map.FindRef(FString(light_name.c_str()));
+
+        if (light_actor) {
+            const FString command = FString::Printf(TEXT("SetIntensity %f"), intensity);
+            FOutputDeviceNull ar;
+            result = light_actor->CallFunctionByNameWithArguments(*command, ar, nullptr, true);
+        }
+    },
+                                             true);
+    return result;
+}
+
 bool WorldSimApi::createVoxelGrid(const Vector3r& position, const int& x_size, const int& y_size, const int& z_size, const float& res, const std::string& output_file)
 {
     bool success = false;
@@ -336,29 +352,9 @@ bool WorldSimApi::enableAnnotationObjectTextureByPath(const std::string& annotat
     return simmode_->EnableMeshTextureAnnotationByPath(annotation_name, mesh_name, is_name_regex);
 }
 
-std::string WorldSimApi::getAnnotationObjectTexturePath(const std::string& annotation_name, const std::string& mesh_name) const
+std::string  WorldSimApi::getAnnotationObjectTexturePath(const std::string& annotation_name, const std::string& mesh_name) const
 {
     return simmode_->GetMeshTextureAnnotationPath(annotation_name, mesh_name);
-}
-
-bool WorldSimApi::setWorldLightVisibility(const std::string& light_name, bool is_visible)
-{
-    return simmode_->SetWorldLightVisibility(light_name, is_visible);
-}
-
-bool WorldSimApi::setWorldLightIntensity(const std::string& light_name, float intensity)
-{
-    return simmode_->SetWorldLightIntensity(light_name, intensity);
-}
-
-bool WorldSimApi::setVehicleLightVisibility(const std::string& vehicle_name, const std::string& light_name, bool is_visible)
-{
-    return simmode_->getVehicleSimApi(vehicle_name)->setLightVisibility(light_name, is_visible);
-}
-
-bool WorldSimApi::setVehicleLightIntensity(const std::string& vehicle_name, const std::string& light_name, float intensity)
-{
-    return simmode_->getVehicleSimApi(vehicle_name)->setLightIntensity(light_name, intensity);
 }
 
 void WorldSimApi::printLogMessage(const std::string& message,
@@ -372,16 +368,6 @@ std::vector<std::string> WorldSimApi::listSceneObjects(const std::string& name_r
     std::vector<std::string> result;
     UAirBlueprintLib::RunCommandOnGameThread([this, &name_regex, &result]() {
         result = UAirBlueprintLib::ListMatchingActorsOriginal(simmode_, name_regex);
-    },
-        true);
-    return result;
-}
-
-std::vector<std::pair<std::string, std::string>> WorldSimApi::listSceneObjectsTags(const std::string& name_regex) const
-{
-    std::vector<std::pair<std::string, std::string>> result;
-    UAirBlueprintLib::RunCommandOnGameThread([this, &name_regex, &result]() {
-        result = UAirBlueprintLib::ListMatchingActorsTags(simmode_, name_regex);
     },
         true);
     return result;

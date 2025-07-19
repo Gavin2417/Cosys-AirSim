@@ -6,8 +6,8 @@
 // Overwrite the material
 
 #include "Runtime/CoreUObject/Public/UObject/ConstructorHelpers.h"
-#include "Runtime/Engine/Public/Materials/Material.h"
-#include "Runtime/Engine/Public/Materials/MaterialInstanceDynamic.h"
+#include "Runtime/Engine/Classes/Materials/Material.h"
+#include "Runtime/Engine/Classes/Materials/MaterialInstanceDynamic.h"
 #include "Runtime/Engine/Classes/Engine/StaticMesh.h"
 #include "Runtime/Engine/Classes/Components/SkeletalMeshComponent.h"
 #include "Runtime/Launch/Resources/Version.h"
@@ -33,8 +33,6 @@ class FStaticAnnotationSceneProxy : public FStaticMeshSceneProxy
 {
 public:
 	FMaterialRenderProxy* MaterialRenderProxy;
-
-	//FStaticMeshSceneProxyDesc::InitializeFrom(UStaticMeshComponent* Component);
 
 	FStaticAnnotationSceneProxy(UStaticMeshComponent* Component, bool bForceLODsShareStaticLighting, UMaterialInterface* AnnotationMID) :
 		FStaticMeshSceneProxy(Component, bForceLODsShareStaticLighting)
@@ -189,8 +187,8 @@ UAnnotationComponent::UAnnotationComponent(const FObjectInitializer& ObjectIniti
 {
 	bSkeletalMesh = false;
 	bTexture = false;
-
 	FString MaterialPath = TEXT("Material'/AirSim/HUDAssets/AnnotationMaterial.AnnotationMaterial'");
+
 	static ConstructorHelpers::FObjectFinder<UMaterial> AnnotationMaterialObject(*MaterialPath);
 	if (AnnotationMaterialObject.Object == nullptr)
     {
@@ -200,18 +198,6 @@ UAnnotationComponent::UAnnotationComponent(const FObjectInitializer& ObjectIniti
     {
         AnnotationMaterial = AnnotationMaterialObject.Object;
 	}
-
-	FString MaterialPathSphere = TEXT("Material'/AirSim/HUDAssets/AnnotationMaterialSphere.AnnotationMaterialSphere'");
-	static ConstructorHelpers::FObjectFinder<UMaterial> SphereMaterialObject(*MaterialPathSphere);
-	if (SphereMaterialObject.Object == nullptr)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AirSim Annotation: Sphere annotation material is not valid."));
-	}
-	else
-	{
-		SphereMaterial = SphereMaterialObject.Object;
-	}
-
 	// ParentMeshInfo = MakeShareable(new FParentMeshInfo(nullptr));
 	// This will be invalid until attached to a MeshComponent
 	this->PrimaryComponentTick.bCanEverTick = true;
@@ -221,33 +207,21 @@ void UAnnotationComponent::OnRegister()
 {
 	Super::OnRegister();
 
-	if (this->GetFName().ToString().Contains("annotation_sphere")) {
-		AnnotationMID = UMaterialInstanceDynamic::Create(SphereMaterial, this, TEXT("AnnotationMaterialMID"));
-		if (!IsValid(AnnotationMID))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("AirSim Annotation: SphereMaterial is not correctly initialized"));
-			return;
-		}
-		FLinearColor LinearAnnotationColor = FLinearColor(0, 0, 0, 1.0);
-		AnnotationMID->SetVectorParameterValue("AnnotationColor", LinearAnnotationColor);
+	// Note: This can not be placed in the constructor, MID means material instance dynamic
+	AnnotationMID = UMaterialInstanceDynamic::Create(AnnotationMaterial, this, TEXT("AnnotationMaterialMID"));
+	if (!IsValid(AnnotationMID))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AirSim Annotation: ColorAnnotationMaterial is not correctly initialized"));
+		return;
 	}
-	else {
-		// Note: This can not be placed in the constructor, MID means material instance dynamic
-		AnnotationMID = UMaterialInstanceDynamic::Create(AnnotationMaterial, this, TEXT("AnnotationMaterialMID"));
-		if (!IsValid(AnnotationMID))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("AirSim Annotation: ColorAnnotationMaterial is not correctly initialized"));
-			return;
-		}
-		const float OneOver255 = 1.0f / 255.0f;
-		FLinearColor LinearAnnotationColor = FLinearColor(
-			this->AnnotationColor.R * OneOver255,
-			this->AnnotationColor.G * OneOver255,
-			this->AnnotationColor.B * OneOver255,
-			1.0
-		);
-		AnnotationMID->SetVectorParameterValue("AnnotationColor", LinearAnnotationColor);
-	}
+	const float OneOver255 = 1.0f / 255.0f;
+	FLinearColor LinearAnnotationColor = FLinearColor(
+		this->AnnotationColor.R * OneOver255,
+		this->AnnotationColor.G * OneOver255,
+		this->AnnotationColor.B * OneOver255,
+		1.0
+	);
+	AnnotationMID->SetVectorParameterValue("AnnotationColor", LinearAnnotationColor);
 }
 
 /** 
@@ -256,30 +230,8 @@ void UAnnotationComponent::OnRegister()
  */
 void UAnnotationComponent::SetAnnotationColor(FColor NewAnnotationColor)
 {
-	if (NewAnnotationColor.R == 27)NewAnnotationColor.R = 26;
-	if (NewAnnotationColor.G == 27)NewAnnotationColor.G = 26;
-	if (NewAnnotationColor.B == 27)NewAnnotationColor.B = 26;
-	if (NewAnnotationColor.R == 32)NewAnnotationColor.R = 31;
-	if (NewAnnotationColor.G == 32)NewAnnotationColor.G = 31;
-	if (NewAnnotationColor.B == 32)NewAnnotationColor.B = 31;
-	if (NewAnnotationColor.R == 35)NewAnnotationColor.R = 34;
-	if (NewAnnotationColor.G == 35)NewAnnotationColor.G = 34;
-	if (NewAnnotationColor.B == 35)NewAnnotationColor.B = 34;
-	if (NewAnnotationColor.R == 41)NewAnnotationColor.R = 40;
-	if (NewAnnotationColor.G == 41)NewAnnotationColor.G = 40;
-	if (NewAnnotationColor.B == 41)NewAnnotationColor.B = 40;
-	if (NewAnnotationColor.R == 44)NewAnnotationColor.R = 43;
-	if (NewAnnotationColor.G == 44)NewAnnotationColor.G = 43;
-	if (NewAnnotationColor.B == 44)NewAnnotationColor.B = 43;
-	if (NewAnnotationColor.R == 49)NewAnnotationColor.R = 48;
-	if (NewAnnotationColor.G == 49)NewAnnotationColor.G = 48;
-	if (NewAnnotationColor.B == 49)NewAnnotationColor.B = 48;
-	if (NewAnnotationColor.R == 51)NewAnnotationColor.R = 50;
-	if (NewAnnotationColor.G == 51)NewAnnotationColor.G = 50;
-	if (NewAnnotationColor.B == 51)NewAnnotationColor.B = 50;
 	this->AnnotationColor = NewAnnotationColor;
 	const float OneOver255 = 1.0f / 255.0f; // TODO: Check 255 or 256?
-
 	FLinearColor LinearAnnotationColor = FLinearColor(
 		AnnotationColor.R * OneOver255,
 		AnnotationColor.G * OneOver255,
@@ -370,14 +322,14 @@ FPrimitiveSceneProxy* UAnnotationComponent::CreateSceneProxy(USkeletalMeshCompon
 {
 	UMaterialInterface* ProxyMaterial = AnnotationMID; // Material Instance Dynamic
 
-	ERHIFeatureLevel::Type SceneFeatureLevel = GetWorld()->GetFeatureLevel();
+	ERHIFeatureLevel::Type SceneFeatureLevel = GetWorld()->FeatureLevel;
 
 	// Ref: https://github.com/EpicGames/UnrealEngine/blob/4.19/Engine/Source/Runtime/Engine/Private/Components/SkinnedMeshComponent.cpp#L415
 	FSkeletalMeshRenderData* SkelMeshRenderData = SkeletalMeshComponent->GetSkeletalMeshRenderData();
 
 	// Only create a scene proxy for rendering if properly initialized
 	if (SkelMeshRenderData &&
-		SkelMeshRenderData->LODRenderData.IsValidIndex(SkeletalMeshComponent->GetPredictedLODLevel()) &&
+		SkelMeshRenderData->LODRenderData.IsValidIndex(SkeletalMeshComponent->PredictedLODLevel) &&
 		SkeletalMeshComponent->MeshObject) // The risk of using MeshObject
 	{
 		// Only create a scene proxy if the bone count being used is supported, or if we don't have a skeleton (this is the case with destructibles)
@@ -465,9 +417,6 @@ FBoxSphereBounds UAnnotationComponent::CalcBounds(const FTransform & LocalToWorl
 	}
 
 	FBoxSphereBounds DefaultBounds;
-	DefaultBounds.Origin = LocalToWorld.GetLocation();
-	DefaultBounds.BoxExtent = FVector::ZeroVector;
-	DefaultBounds.SphereRadius = 0.f;
 	return DefaultBounds;
 }
 

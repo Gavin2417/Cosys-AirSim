@@ -60,7 +60,6 @@ namespace airlib
         void simSetWeatherParameter(WorldSimApiBase::WeatherParameter param, float val);
 
         vector<string> simListSceneObjects(const string& name_regex = string(".*")) const;
-        vector<std::pair<string, string>> simListSceneObjectsTags(const string& name_regex = string(".*")) const;
         vector<string> simListInstanceSegmentationObjects() const;
         vector<Vector3r> simGetInstanceSegmentationColorMap() const;
         vector<Pose> simListInstanceSegmentationPoses(bool ned = true, bool only_visible = false) const;
@@ -98,11 +97,6 @@ namespace airlib
         void simSetDetectionFilterRadius(const std::string& camera_name, ImageCaptureBase::ImageType type, const float radius_cm, const std::string& vehicle_name = "", const std::string& annotation_name = "");
         void simClearDetectionMeshNames(const std::string& camera_name, ImageCaptureBase::ImageType type, const std::string& vehicle_name = "", const std::string& annotation_name = "");
         vector<DetectionInfo> simGetDetections(const std::string& camera_name, ImageCaptureBase::ImageType image_type, const std::string& vehicle_name = "", const std::string& annotation_name = "");
-
-        bool simSetWorldLightVisibility(const string& light_name, bool is_visible = true);
-        bool simSetWorldLightIntensity(const string& light_name, float intensity);
-        bool simSetVehicleLightVisibility(const string& vehicle_name, const string& light_name, bool is_visible = true);
-        bool simSetVehicleLightIntensity(const string& vehicle_name, const string& light_name, float intensity);
 
         void simFlushPersistentMarkers();
         void simPlotPoints(const vector<Vector3r>& points, const vector<float>& color_rgba, float size, float duration, bool is_persistent);
@@ -177,8 +171,6 @@ namespace airlib
         bool simCreateVoxelGrid(const Vector3r& position, const int& x_size, const int& y_size, const int& z_size, const float& res, const std::string& output_file);
         msr::airlib::Kinematics::State simGetGroundTruthKinematics(const std::string& vehicle_name = "") const;
         void simSetKinematics(const Kinematics::State& state, bool ignore_collision, const std::string& vehicle_name = "");
-        msr::airlib::Kinematics::State simGetPhysicsRawKinematics(const std::string& vehicle_name = "") const;
-        void simSetPhysicsRawKinematics(const Kinematics::State& state, const std::string& vehicle_name = "");
         msr::airlib::Environment::State simGetGroundTruthEnvironment(const std::string& vehicle_name = "") const;
         std::vector<std::string> simSwapTextures(const std::string& tags, int tex_id = 0, int component_id = 0, int material_id = 0);
         bool simSetObjectMaterial(const std::string& object_name, const std::string& material_name, const int component_id = 0);

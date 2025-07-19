@@ -24,8 +24,8 @@ const std::unordered_map<int, std::string> AirsimROSWrapper::image_type_int_to_s
     { 7, "Infrared" },
     { 8, "OpticalFlow" },
     { 9, "OpticalFlowVis" },
-    { 10, "Lighting" },
-    { 11, "Annotation" },
+    { 10, "Annotation" }
+
 };
 
 AirsimROSWrapper::AirsimROSWrapper(const std::shared_ptr<rclcpp::Node> nh, const std::shared_ptr<rclcpp::Node> nh_img, const std::shared_ptr<rclcpp::Node> nh_lidar, const std::shared_ptr<rclcpp::Node> nh_gpulidar, const std::shared_ptr<rclcpp::Node> nh_echo, const std::string& host_ip, const std::shared_ptr<rclcpp::CallbackGroup> callbackGroup, bool enable_api_control, bool enable_object_transforms_list, uint16_t host_port)
@@ -406,8 +406,6 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
     // todo add per vehicle reset in AirLib API
     reset_srvr_ = nh_->create_service<airsim_interfaces::srv::Reset>("~/reset", std::bind(&AirsimROSWrapper::reset_srv_cb, this, _1, _2));
 
-    list_scene_object_tags_srvr_ = nh_->create_service<airsim_interfaces::srv::ListSceneObjectTags>("~/list_scene_object_tags", std::bind(&AirsimROSWrapper::list_scene_object_tags_srv_cb, this, _1, _2));
-
     if (publish_clock_) {
         clock_pub_ = nh_->create_publisher<rosgraph_msgs::msg::Clock>("~/clock", 1);
     }
@@ -603,20 +601,6 @@ bool AirsimROSWrapper::reset_srv_cb(std::shared_ptr<airsim_interfaces::srv::Rese
 
     airsim_client_->reset();
     return true; //todo
-}
-
-bool AirsimROSWrapper::list_scene_object_tags_srv_cb(const std::shared_ptr<airsim_interfaces::srv::ListSceneObjectTags::Request> request, const std::shared_ptr<airsim_interfaces::srv::ListSceneObjectTags::Response> response)
-{
-    std::lock_guard<std::mutex> guard(control_mutex_);
-    std::string regex_name = request->regex_name.empty() ? ".*": request->regex_name;
-    std::vector<std::pair<std::string, std::string>> first_tag = airsim_client_->simListSceneObjectsTags(regex_name);
-
-    for(const auto& pair: first_tag)
-    {
-        response->objects.push_back(pair.first);
-        response->tags.push_back(pair.second);
-    }
-    return true;
 }
 
 tf2::Quaternion AirsimROSWrapper::get_tf2_quat(const msr::airlib::Quaternionr& airlib_quat) const

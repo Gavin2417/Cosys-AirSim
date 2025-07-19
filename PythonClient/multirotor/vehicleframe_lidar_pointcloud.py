@@ -3,7 +3,7 @@
 # Sample settings.json used for this script:
 '''
 {
-    "SeeDocsAt": "https://cosys-lab.github.io/Cosys-AirSim/settings/",
+    "SeeDocsAt": "https://cosys-lab.github.io/settings/",
     "SettingsVersion": 20,
 
     "SimMode": "Multirotor",

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import math
 
@@ -49,11 +50,8 @@ class _ImageType(type):
         return 8
     def OpticalFlowVis(cls):
         return 9
-    def Lighting(cls):
-        return 10
     def Annotation(cls):
-        return 11
-
+        return 10
 
     def __getattr__(self, key):
         if key == 'DepthPlanar':
@@ -71,8 +69,7 @@ class ImageType(metaclass=_ImageType):
     Infrared = 7
     OpticalFlow = 8
     OpticalFlowVis = 9
-    Lighting = 10
-    Annotation = 11
+    Annotation = 10
 
 class DrivetrainType:
     MaxDegreeOfFreedom = 0

@@ -55,7 +55,6 @@ private:
 
 	UPROPERTY()
 	UMaterial* AnnotationMaterial;
-	UMaterial* SphereMaterial;
 
 	UPROPERTY()
 	UMaterialInstanceDynamic* AnnotationMID;

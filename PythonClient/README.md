@@ -6,10 +6,10 @@ It can also be installed as a Python module. This integrates most API functions 
 Note that this is renamed `cosysairsim` from the original `airsim` module. 
 
 ## Dependencies
-This package depends on `numpy` and `msgpack` and would automatically install `numpy` and `rpc-msgpack` (this may need administrator/sudo prompt):
+This package depends on `numpy` and `msgpack` and would automatically install `numpy` and `msgpack-rpc-python` (this may need administrator/sudo prompt):
 ```
 pip install numpy
-pip install rpc-msgpack
+pip install msgpack-rpc-python
 ```
 
 ## Installing from pip
@@ -22,5 +22,5 @@ For this go into the _PythonClient_ folder of the Cosys-AirSim repository and us
 ## More Info
 
 More information on AirSim can be found at:
-https://cosys-lab.github.io/Cosys-AirSim/
+https://cosys-lab.github.io/
 

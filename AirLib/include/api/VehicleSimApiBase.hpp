@@ -55,8 +55,6 @@ namespace airlib
         virtual void setPose(const Pose& pose, bool ignore_collision) = 0;
         virtual const Kinematics::State* getGroundTruthKinematics() const = 0;
         virtual void setKinematics(const Kinematics::State& state, bool ignore_collision) = 0;
-        virtual Kinematics::State getPhysicsRawKinematics() = 0;
-        virtual void setPhysicsRawKinematics(const Kinematics::State& state) = 0;
         virtual const msr::airlib::Environment* getGroundTruthEnvironment() const = 0;
 
         virtual CameraInfo getCameraInfo(const std::string& camera_name) const = 0;
