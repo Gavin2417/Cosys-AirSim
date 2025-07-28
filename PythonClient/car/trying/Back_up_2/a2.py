@@ -3,14 +3,13 @@ import os, math, time, heapq
 import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
 from scipy.stats import binned_statistic_2d, norm
 from scipy.ndimage import gaussian_filter, binary_dilation, generate_binary_structure, distance_transform_edt
 from scipy.spatial import cKDTree
 from matplotlib.colors import LinearSegmentedColormap
 import numpy.ma as ma
 import cosysairsim as airsim
-import casadi as ca
-
 # from linefit import ground_seg
 from function5 import calculate_combined_risks, compute_cvar_cellwise
 from scipy.ndimage import generic_filter
@@ -205,136 +204,21 @@ class GridMap:
             estimates.append([gx * self.resolution, gy * self.resolution, mean_label])
         return np.array(estimates)
 
+# ---------------------------------------------------------------------------
+# PID Controller for Steering and Forward Motion
+# ---------------------------------------------------------------------------
+class PIDController:
+    def __init__(self, kp, ki, kd, dt=0.1):
+        self.kp, self.ki, self.kd, self.dt = kp, ki, kd, dt
+        self.integral = 0.0
+        self.prev_error = 0.0
 
-
-class NMPCController:
-    def __init__(self, horizon=10, dt=0.1, wheelbase=0.5, V_max=5.0, delta_max=np.deg2rad(25)):
-        self.N = horizon
-        self.dt = dt
-        self.L = wheelbase
-        self.V_max = V_max
-        self.delta_max = delta_max
-        
-        # Weights for cost function
-        self.Q_x = 3.0
-        self.Q_y = 3.0
-        self.Q_psi = 2.0
-        self.R_v = 1e-4
-        self.R_delta = 2.0
-
-        # Define state and control symbols
-        x = ca.SX.sym('x')
-        y = ca.SX.sym('y')
-        psi = ca.SX.sym('psi')
-        states = ca.vertcat(x, y, psi)
-        n_states = states.size()[0]
-
-        v = ca.SX.sym('v')
-        delta = ca.SX.sym('delta')
-        controls = ca.vertcat(v, delta)
-        n_controls = controls.size()[0]
-
-        # Kinematic bicycle model
-        rhs = ca.vertcat(
-            v * ca.cos(psi),
-            v * ca.sin(psi),
-            v/self.L * ca.tan(delta)
-        )
-        f = ca.Function('f', [states, controls], [rhs])
-
-        # Decision variables
-        U = ca.SX.sym('U', n_controls, self.N)
-        X = ca.SX.sym('X', n_states, self.N + 1)
-
-        # Parameter vector: initial state + reference trajectory (x,y) for each horizon step
-        P = ca.SX.sym('P', n_states + 2*self.N)
-
-        # Objective and constraints lists
-        obj = 0
-        g = []
-
-        # Initial condition constraint
-        g.append(X[:, 0] - P[0:n_states])
-
-        # Build the MPC optimization
-        for k in range(self.N):
-            # Reference for current step
-            ref_x = P[n_states + 2*k]
-            ref_y = P[n_states + 2*k + 1]
-            st = X[:, k]
-            con = U[:, k]
-
-            # Cost: tracking + control effort
-            obj += self.Q_x * (st[0] - ref_x)**2
-            obj += self.Q_y * (st[1] - ref_y)**2
-            obj += self.Q_psi * (st[2] - ca.atan2(ref_y - st[1], ref_x - st[0]))**2
-            obj += self.R_v * (con[0]/self.V_max)**2
-            obj += self.R_delta * (con[1]/self.delta_max)**2
-
-            # System dynamics (Euler integration)
-            st_next = X[:, k+1]
-            f_value = f(st, con)
-            st_next_euler = st + self.dt * f_value
-            g.append(st_next - st_next_euler)
-
-        # Concatenate constraints
-        g = ca.vertcat(*g)
-
-        # Decision variables vector
-        OPT_vars = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
-
-        # NLP problem
-        nlp_dict = {'f': obj, 'x': OPT_vars, 'g': g, 'p': P}
-        opts = {'ipopt.max_iter': 100, 'ipopt.print_level': 5, 'print_time': 1}
-        self.solver = ca.nlpsol('solver', 'ipopt', nlp_dict, opts)
-
-        # Bounds for optimization variables
-        lbx = []
-        ubx = []
-        # State bounds
-        for _ in range(self.N + 1):
-            lbx += [-ca.inf, -ca.inf, -ca.inf]
-            ubx += [ ca.inf,  ca.inf,  ca.inf]
-        # Control bounds
-        for _ in range(self.N):
-            lbx += [0.0, -self.delta_max]
-            ubx += [ self.V_max,  self.delta_max]
-        self.lbx = lbx
-        self.ubx = ubx
-
-        # Bounds for constraints (equalities)
-        self.lbg = [0] * g.size()[0]
-        self.ubg = [0] * g.size()[0]
-
-    def solve(self, x0, ref_traj):
-        """
-        Solve the NMPC problem.
-        :param x0: Current state [x, y, psi]
-        :param ref_traj: Array of shape (N, 2) with reference (x, y) points
-        :return: optimal control [v, delta] for the first step
-        """
-        # Build parameter vector
-        p = list(x0) + ref_traj.flatten().tolist()
-
-        # Initial guess for states and controls
-        x_init = np.tile(x0, (self.N+1, 1))
-        u_init = np.tile([0.2, 0.0], (self.N, 1))
-        init_guess = np.concatenate((x_init.flatten(), u_init.flatten()))
-
-        # Solve
-        sol = self.solver(
-            x0=init_guess,
-            lbx=self.lbx,
-            ubx=self.ubx,
-            lbg=self.lbg,
-            ubg=self.ubg,
-            p=p
-        )
-
-        # Extract control sequence
-        u_opt = sol['x'][-2*self.N:].full().reshape(self.N, 2)
-        return u_opt[0]  # first control action
-
+    def compute(self, error):
+        self.integral += error * self.dt
+        derivative = (error - self.prev_error) / self.dt
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative
+        self.prev_error = error
+        return output
 
 # ---------------------------------------------------------------------------
 # Fade risk near high-risk cells using a distance transform.
@@ -355,6 +239,10 @@ if __name__ == "__main__":
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
     grid_map_ground = GridMap(resolution=0.1)
+    
+    steering_pid = PIDController(kp=0.8462027727540303, ki=0.023914715286008515, kd=0.0939731107200599, dt=0.1)
+    forward_pid  = PIDController(kp=0.4, ki=0.05, kd=0.10, dt=0.1)
+    current_target_index = 0
 
     # Initialize ground segmentation.
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
@@ -362,19 +250,14 @@ if __name__ == "__main__":
     device=None,
     subsample_grid=0.1
     )
-
+    seg = RandlaGroundSegmentor()
     fig, ax = plt.subplots()
     plt.ion()
     colorbar = None
     path = None
     temp_dest = None
-    nmpc = NMPCController(
-        horizon=2,      # how many steps to look ahead
-        dt=0.1,          # same as your main loop
-        wheelbase=0.5,   # Husky wheelbase [m]
-        V_max=1.0,       # tune to your platform
-        delta_max=np.deg2rad(30)
-    )
+    # temp_path = None
+
     current_target_index = 0
 
     # Define grid boundaries based on vehicle and destination.
@@ -414,13 +297,18 @@ if __name__ == "__main__":
             points_world[:, 2] = -points_world[:, 2]  # Adjust Z if needed
             labels = seg.segment(points_world)
 
+    
             # Populate grid maps based on segmentation.
             for i, point in enumerate(points_world):
                 x, y, z = point
                 point_label = labels[i]
                 grid_map_ground.add_point(x, y, z, point_label)
 
+
             ground_points = grid_map_ground.get_label_estimate()
+
+
+
             vehicle_x, vehicle_y = position[0], position[1]
             center = np.array([vehicle_x, vehicle_y])
         
@@ -446,7 +334,7 @@ if __name__ == "__main__":
 
             # # Mask cells far from the vehicle.
             distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
-            cvar_combined_risk[distance_from_vehicle.T > 15.0] = np.nan
+            cvar_combined_risk[distance_from_vehicle.T > 10.0] = np.nan
             # Convert vehicle and destination positions to grid indices.
             start_idx = (np.digitize(vehicle_x, x_edges) - 1, np.digitize(vehicle_y, y_edges) - 1)
             dest_idx = (np.digitize(destination_point[0], x_edges) - 1, np.digitize(destination_point[1], y_edges) - 1)
@@ -537,50 +425,27 @@ if __name__ == "__main__":
                 # PID Control: Follow the computed (smoothed) A* path.
                 # -----------------------------------------------------------------
                 if current_target_index < len(smoothed_path):
-                    # find index of closest point on smoothed_path
-                    vehicle_pos = np.array([vehicle_x, vehicle_y])
-                    dists = np.linalg.norm(smoothed_path - vehicle_pos, axis=1)
-                    # find index of closest point on smoothed_path
-                    i_closest = int(np.argmin(np.linalg.norm(smoothed_path - vehicle_pos, axis=1)))
-                
-                    # start one step *beyond* the closest, so MPC actually has to move
-                    start_idx = min(i_closest + 1, len(smoothed_path)-1)
-                    ref_pts = smoothed_path.tolist()
-                    ref_list = ref_pts[start_idx : start_idx + nmpc.N]
-                    # pad with final point if too short
-                    if len(ref_list) < nmpc.N:
-                        ref_list += [ref_pts[-1]] * (nmpc.N - len(ref_list))
-                    ref_traj = np.array(ref_list)
+                    target_point = smoothed_path[current_target_index]
+                    distance_to_target = np.linalg.norm(np.array(target_point) - np.array([vehicle_x, vehicle_y]))
+                    if distance_to_target < 2:
+                        current_target_index += 2
+                        current_target_index = min(current_target_index, len(smoothed_path) - 1)
+                        target_point = smoothed_path[current_target_index]
+                    desired_heading = math.atan2(target_point[1] - vehicle_y,
+                                                 target_point[0] - vehicle_x)
+                    current_heading = math.atan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+                    heading_error = (desired_heading - current_heading + math.pi) % (2 * math.pi) - math.pi
 
-                    # get current yaw
-                    current_heading = math.atan2(rotation_matrix[1,0], rotation_matrix[0,0])
-                    x0 = [vehicle_x, vehicle_y, current_heading]
-
-                    # big‐turn fallback
-                    next_wp = ref_traj[0]
-
-
-                    desired_psi = math.atan2(next_wp[1]-vehicle_y, next_wp[0]-vehicle_x)
-                    raw_error = desired_psi - current_heading
-                    heading_error = math.atan2(math.sin(raw_error), math.cos(raw_error))
-                    big_turn_thresh = np.deg2rad(40)
-                    ctr = airsim.CarControls()
-                    
-            
-                    v_cmd, delta_cmd = nmpc.solve(x0, ref_traj)
-            
-                    # throttle [0 … 0.5]
-                    throttle_ratio = np.clip(v_cmd / nmpc.V_max, 0.0, 1.0)
-                    ctr.throttle = float(throttle_ratio)
-
-                    # steering [–1 … 1]
-                    ctr.steering = float(np.clip(delta_cmd / nmpc.delta_max, -1.0, 1.0))
-                    # print(ctr.steering, " ", ctr. throttle)
-                    # if abs(heading_error) > big_turn_thresh:
-                    #     ctr.throttle = 0.0
-     
-
-                    lidar_test.client.setCarControls(ctr)
+                    steering = steering_pid.compute(heading_error)
+                    steering = max(min(steering, 1), -1)
+                    dx = target_point[0] - vehicle_x
+                    dy = target_point[1] - vehicle_y
+                    forward_error = dx * math.cos(current_heading) + dy * math.sin(current_heading)
+                    throttle_value = forward_pid.compute(forward_error)
+                    throttle = 0 if abs(steering) > 0.75 else throttle_value * ((0.75 - abs(steering)) / 0.75)
+                    lidar_test.client.setCarControls(
+                        airsim.CarControls(throttle=throttle, steering=steering), lidar_test.vehicleName
+                    )
             else:
                 lidar_test.client.setCarControls(
                     airsim.CarControls(throttle=0.0275, steering=0), lidar_test.vehicleName
