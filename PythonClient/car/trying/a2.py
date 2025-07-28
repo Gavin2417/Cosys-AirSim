@@ -1,4 +1,3 @@
-# import setup_path
 import os, math, time, heapq
 import numpy as np
 import open3d as o3d
@@ -19,6 +18,7 @@ rand_dir = os.path.join(project_root, "rand")
 os.chdir(rand_dir)
 from predict1 import RandlaGroundSegmentor
 import casadi as ca
+
 class NMPCController:
     def __init__(self, horizon=10, dt=0.1, wheelbase=0.5,
                  V_max=0.5, delta_max=np.deg2rad(25)):
@@ -46,11 +46,11 @@ class NMPCController:
         f   = ca.Function('f', [states, controls], [rhs])
 
         # decision variables
-        X = ca.SX.sym('X', 3, N+1)
-        U = ca.SX.sym('U', 2, N)
+        X = ca.SX.sym('X', 3, self.N+1)
+        U = ca.SX.sym('U', 2, self.N)
 
         # parameters: [ x0(3), ref_x/ref_y (2*N), dt_seq (N) ] → total 3+3N
-        P = ca.SX.sym('P', 3 + 2*N + N)
+        P = ca.SX.sym('P', 3 + 2*self.N + self.N)
 
         g   = []
         obj = 0
@@ -58,12 +58,12 @@ class NMPCController:
         # initial‐state constraint
         g.append(X[:,0] - P[0:3])
 
-        for k in range(N):
+        for k in range(self.N):
             # extract references from P
             xr = P[3 + 2*k]
             yr = P[3 + 2*k + 1]
             # extract dt from P
-            dt_k = P[3 + 2*N + k]
+            dt_k = P[3 + 2*self.N + k]
 
             st = X[:,k]
             uc = U[:,k]
@@ -87,9 +87,9 @@ class NMPCController:
             g.append(st_next - (st + dt_k * fval))
 
         # terminal cost  (unchanged)
-        errT = X[:,N] - ca.vertcat(
-            P[3+2*(N-1)],
-            P[3+2*(N-1)+1],
+        errT = X[:,self.N] - ca.vertcat(
+            P[3+2*(self.N-1)],
+            P[3+2*(self.N-1)+1],
             0
         )
         Qf   = np.diag([10,10,5])
@@ -100,12 +100,20 @@ class NMPCController:
         OPT = ca.vertcat(ca.reshape(X, -1,1),
                          ca.reshape(U, -1,1))
         nlp = {'f': obj, 'x':OPT, 'g':G, 'p':P}
-        self.solver = ca.nlpsol('solver','ipopt', nlp, {'ipopt.print_level':0})
+        opts = {
+            # IPOPT itself
+            'ipopt.print_level':           0,      # no iteration‐by‐iteration printouts
+            'ipopt.sb':                    'yes',  # suppress solver banner
+            'ipopt.print_timing_statistics':'no',  # no timing stats
+            # CasADi wrapper
+            'print_time':                  False,  # don’t print overall timing
+        }
+        self.solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
 
         # bounds (X free, U in [0,V_max]×[-δ_max,δ_max])
-        nX = 3*(N+1)
-        self.lbx = [-ca.inf]*nX + [0, -self.delta_max]*N
-        self.ubx = [ ca.inf]*nX + [self.V_max, self.delta_max]*N
+        nX = 3*(self.N+1)
+        self.lbx = [-ca.inf]*nX + [0, -self.delta_max]*self.N
+        self.ubx = [ ca.inf]*nX + [self.V_max, self.delta_max]*self.N
         self.lbg = [0]*G.size1()
         self.ubg = [0]*G.size1()
 
@@ -131,32 +139,6 @@ class NMPCController:
                           p=p)
         U_opt = sol['x'][-2*N:].full().reshape(N,2)
         return U_opt[0]
-def interpolate_in_radius(grid, radius):
-    """
-    Vectorized interpolation using cKDTree: fills NaNs in a grid based on nearby valid cells.
-    """
-    valid_mask = ~np.isnan(grid)
-    if np.sum(valid_mask) == 0:
-        return grid  # Nothing to interpolate from
-
-    # Grid coordinates
-    X, Y = np.meshgrid(np.arange(grid.shape[0]), np.arange(grid.shape[1]), indexing='ij')
-    coords = np.stack([X[valid_mask], Y[valid_mask]], axis=1)
-    values = grid[valid_mask]
-
-    nan_mask = np.isnan(grid)
-    nan_coords = np.stack([X[nan_mask], Y[nan_mask]], axis=1)
-
-    # KDTree on valid points
-    tree = cKDTree(coords)
-    neighbors_list = tree.query_ball_point(nan_coords, radius)
-
-    for idx, neighbors in enumerate(neighbors_list):
-        if neighbors:
-            weights = 1.0 / (np.linalg.norm(coords[neighbors] - nan_coords[idx], axis=1) + 1e-6)
-            grid[nan_coords[idx][0], nan_coords[idx][1]] = np.sum(weights * values[neighbors]) / np.sum(weights)
-
-    return grid
 
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
@@ -305,6 +287,7 @@ class AStarPlanner:
                                               neighbor))
 
         return None
+
 def smooth_path(path, window_size=5):
     """
     Smooths a sequence of (x,y) points using a simple moving average filter.
@@ -319,13 +302,39 @@ def smooth_path(path, window_size=5):
     sm = [np.mean(path[max(0, i-half):min(n_points, i+half+1)], axis=0)
           for i in range(n_points)]
     return np.array(sm)
+def interpolate_in_radius(grid, radius):
+    """
+    Vectorized interpolation using cKDTree: fills NaNs in a grid based on nearby valid cells.
+    """
+    valid_mask = ~np.isnan(grid)
+    if np.sum(valid_mask) == 0:
+        return grid  # Nothing to interpolate from
+
+    # Grid coordinates
+    X, Y = np.meshgrid(np.arange(grid.shape[0]), np.arange(grid.shape[1]), indexing='ij')
+    coords = np.stack([X[valid_mask], Y[valid_mask]], axis=1)
+    values = grid[valid_mask]
+
+    nan_mask = np.isnan(grid)
+    nan_coords = np.stack([X[nan_mask], Y[nan_mask]], axis=1)
+
+    # KDTree on valid points
+    tree = cKDTree(coords)
+    neighbors_list = tree.query_ball_point(nan_coords, radius)
+
+    for idx, neighbors in enumerate(neighbors_list):
+        if neighbors:
+            weights = 1.0 / (np.linalg.norm(coords[neighbors] - nan_coords[idx], axis=1) + 1e-6)
+            grid[nan_coords[idx][0], nan_coords[idx][1]] = np.sum(weights * values[neighbors]) / np.sum(weights)
+
+    return grid
 
 if __name__ == '__main__':
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
     seg = RandlaGroundSegmentor(device=None, subsample_grid=0.1)
 
-   # Grid setup:
+   # Map setup:
     grid_resolution = 0.1
     margin = 4
     pos, _ = lidar_test.get_vehicle_pose()
@@ -335,28 +344,32 @@ if __name__ == '__main__':
     max_x = max(start_point[0], destination_point[0]) + margin
     min_y = min(start_point[1], destination_point[1]) - margin
     max_y = max(start_point[1], destination_point[1]) + margin
-
     x_edges = np.arange(min_x, max_x + grid_resolution, grid_resolution)
     y_edges = np.arange(min_y, max_y + grid_resolution, grid_resolution)
     x_mid = (x_edges[:-1] + x_edges[1:]) / 2
     y_mid = (y_edges[:-1] + y_edges[1:]) / 2
     X, Y = np.meshgrid(x_mid, y_mid)
+    
+    # Setup NMPC and plot
     N = 20
     nmpc = NMPCController(horizon=N,
                           wheelbase=0.25,
                           V_max=0.05,
                           delta_max=np.deg2rad(25))
     ctr = airsim.CarControls()
-
+    grid_map_ground = GridMap(resolution=0.1)
     cmap = LinearSegmentedColormap.from_list("gray_yellow_red",
                [(0.5,0.5,0.5),(1,1,0),(1,0,0)], N=10)
-    fig, ax = plt.subplots(); plt.ion(); prev_t = time.time()
-    grid_map = {}
-    grid_map_ground = GridMap(resolution=0.1)
     colorbar = None
+    fig, ax = plt.subplots(); plt.ion(); 
+    
+    # Define variables
+    prev_grid = None
+    prev_path = None
+    temp_dest = None
 
     replan_thresh = 0.5    # only replan if risk on old path changed by >5%
-    HIGH_RISK = 6
+    HIGH_RISK = 0.65
     DILATION_RADIUS = 2
 
     # build a 5×5 connectivity for a radius≈2 square; you can also use 
@@ -365,9 +378,6 @@ if __name__ == '__main__':
     mask_elem = binary_dilation(np.zeros((5,5), bool), 
                                 structure=struct, 
                                 iterations=2)
-    prev_grid = None
-    prev_path = None
-    temp_dest = None
     prev_t = time.time()
     try:
         while True:
@@ -378,8 +388,7 @@ if __name__ == '__main__':
             points = np.array(pc[:,:3])
             points = points[np.linalg.norm(points,axis=1) > 0.6]
             pos, R = lidar_test.get_vehicle_pose()
-            vehicle_x, vehicle_y = pos[0], pos[1]
-            veh_xy = np.array([vehicle_y, vehicle_x])  
+            vehicle_x, vehicle_y = pos[0], pos[1]  
 
             # Get labels for the points cloud
             world = lidar_test.transform_to_world(points, pos, R)
@@ -424,7 +433,8 @@ if __name__ == '__main__':
                         np.digitize(temp_dest[1], y_edges) - 1)
             if prev_path is not None and not trigger_temp_dest:
                 # Compute a high‐risk mask (True where risk ≥ 0.6) & Dilate it by 2 cells
-                hr = (risk_grid >= HIGH_RISK)
+                max_risk_value = np.nanmax(risk_grid)
+                hr = (risk_grid >= HIGH_RISK* max_risk_value)
                 hr_dilated = binary_dilation(hr, structure=struct, iterations=3)
 
                 # Check if any of our old path indices hit the dilated high‐risk area
