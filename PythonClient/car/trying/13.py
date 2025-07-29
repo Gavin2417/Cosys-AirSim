@@ -8,14 +8,8 @@ from scipy.ndimage import distance_transform_edt, binary_dilation, generate_bina
 from scipy.spatial import cKDTree
 from matplotlib.colors import LinearSegmentedColormap
 import cosysairsim as airsim
-# from linefit import ground_seg
+from linefit import ground_seg
 from function5 import calculate_combined_risks, compute_cvar_cellwise
-base = os.path.dirname(__file__)        
-project_root = base
-print(project_root)
-rand_dir = os.path.join(project_root, "rand")
-os.chdir(rand_dir)
-from predict1 import RandlaGroundSegmentor
 import casadi as ca
 
 class NMPCController:
@@ -138,7 +132,7 @@ class NMPCController:
                           p=p)
         U_opt = sol['x'][-2*N:].full().reshape(N,2)
         return U_opt[0]
-
+    
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
         self.client = airsim.CarClient(ip="100.123.124.47")
@@ -193,21 +187,20 @@ class GridMap:
     def get_grid_cell(self, x, y):
         return (round(x / self.resolution, 1), round(y / self.resolution, 1))
 
-    def add_point(self, x, y, z, label):
+    def add_point(self, x, y, z, timestamp):
         cell = self.get_grid_cell(x, y)
         if cell not in self.grid:
             self.grid[cell] = [z, 1]
         else:
-            self.grid[cell][0] += label
+            self.grid[cell][0] += z
             self.grid[cell][1] += 1
 
-    def get_label_estimate(self):
+    def get_height_estimate(self):
         estimates = []
         for (gx, gy), (z_sum, count) in self.grid.items():
-            # get rhe mean label
-            mean_label = np.ceil(z_sum/count)
-            estimates.append([gx * self.resolution, gy * self.resolution, mean_label])
-        return np.array(estimates)\
+            mean_z = z_sum / count
+            estimates.append([gx * self.resolution, gy * self.resolution, mean_z])
+        return np.array(estimates)
 
 class AStarPlanner:
 
@@ -287,24 +280,8 @@ class AStarPlanner:
 
         return None
 
-def smooth_path(path, window_size=5):
-    """
-    Smooths a sequence of (x,y) points using a simple moving average filter.
-    """
-    path = np.array(path)
-    n_points = len(path)
-    if n_points < window_size:
-        return path
-    if window_size % 2 == 0:
-        window_size += 1
-    half = window_size // 2
-    sm = [np.mean(path[max(0, i-half):min(n_points, i+half+1)], axis=0)
-          for i in range(n_points)]
-    return np.array(sm)
 def interpolate_in_radius(grid, radius):
-    """
-    Vectorized interpolation using cKDTree: fills NaNs in a grid based on nearby valid cells.
-    """
+
     valid_mask = ~np.isnan(grid)
     if np.sum(valid_mask) == 0:
         return grid  # Nothing to interpolate from
@@ -330,6 +307,24 @@ def interpolate_in_radius(grid, radius):
 def filter_points_by_radius(points, center, radius):
     distances = np.linalg.norm(points[:, :2] - center, axis=1)
     return points[distances <= radius]
+def fade_with_distance_transform(risk_grid, high_threshold=0.4, fade_scale=4.0, sigma=5.0):
+    grid_max = np.nanmax(risk_grid)
+    threshold_val = high_threshold * grid_max
+    high_mask = risk_grid > threshold_val
+    dist_map = distance_transform_edt(~high_mask)
+    fade_risk = fade_scale * np.exp(-dist_map / sigma)
+    return np.maximum(risk_grid, fade_risk)
+def smooth_path(path, window_size=5):
+    path = np.array(path)
+    n_points = len(path)
+    if n_points < window_size:
+        return path
+    if window_size % 2 == 0:
+        window_size += 1
+    half = window_size // 2
+    sm = [np.mean(path[max(0, i-half):min(n_points, i+half+1)], axis=0)
+          for i in range(n_points)]
+    return np.array(sm)
 def get_map_setting(sp, dp, margin, grid_resolution):
     # sp = start_point (x,y), dp = destination_point (x,y)
     min_x = min(sp[0], dp[0]) - margin
@@ -352,6 +347,13 @@ STEP_config ={
     'radius_filter': 12,
 
     # RISK
+    'max_height_diff': 0.032, 
+    'max_slope_degrees': 20.0,
+    'risk_radius': 0.5,
+
+    'step_weight': 2.0,
+    'slope_weight': 2.0,
+
     'interpolate_radius': 1.5,
     'cvar_a': 0.7,
     'cvar_radius': 4.0,
@@ -369,24 +371,33 @@ STEP_config ={
     'HIGH_RISK': 0.6,
 
 }
-if __name__ == '__main__':
+if __name__ == "__main__":
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
-    seg = RandlaGroundSegmentor(device=None, subsample_grid=0.1)
 
-   # Map setup:
+    # Initialize ground segmentation.
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
+    config_path = os.path.join(BASE_DIR, "../assets/config.toml")
+    if not os.path.exists(config_path):
+        print(f"Config file {config_path} not found, using default parameters")
+        groundseg = ground_seg()
+    else:
+        groundseg = ground_seg(config_path)
+
+    # Map setup:
     pos, _ = lidar_test.get_vehicle_pose()
     start_point = pos[:2]
     destination_point = np.array([17, -7])
     x_edges, y_edges, x_mid, y_mid = get_map_setting(start_point, destination_point, margin=STEP_config['grid_margin'], grid_resolution=STEP_config['grid_resolution'])
     X, Y = np.meshgrid(x_mid, y_mid)
     grid_map_ground = GridMap(resolution=STEP_config['grid_resolution'])
+    grid_map_obstacle = GridMap(resolution=STEP_config['grid_resolution'])
 
     # Setup NMPC and plot
     nmpc = NMPCController(horizon=STEP_config['N-npmc'],
-                        wheelbase=0.25,
-                        V_max=STEP_config['Vmax-nmpc'],
-                        delta_max=np.deg2rad(STEP_config['delta-nmpc']))
+                          wheelbase=0.25,
+                          V_max=STEP_config['Vmax-nmpc'],
+                          delta_max=np.deg2rad(STEP_config['delta-nmpc']))
     ctr = airsim.CarControls()
     cmap = LinearSegmentedColormap.from_list("gray_yellow_red",
                [(0.5,0.5,0.5),(1,1,0),(1,0,0)], N=10)
@@ -398,7 +409,7 @@ if __name__ == '__main__':
     prev_path = None
     temp_dest = None
 
-    # build a 5×5 connectivity for a radius≈2 square; you can also use a circular structuring element if you want Euclidean radius.
+    # a circular structuring element if you want Euclidean radius.
     struct = generate_binary_structure(2,1)
     mask_elem = binary_dilation(np.zeros((5,5), bool), 
                                 structure=struct, 
@@ -414,45 +425,82 @@ if __name__ == '__main__':
     last_pos = start_point.copy()
     try:
         while True:
-            pc, ts = lidar_test.get_data(gpulidar=True)
-            if pc is None:
+            point_cloud_data, timestamp = lidar_test.get_data(gpulidar=True)
+            if point_cloud_data is None:
                 continue
-
+            
             # Process point cloud.
-            points = np.array(pc[:,:3])
+            points = np.array(point_cloud_data[:, :3], dtype=np.float64)
             points = points[np.linalg.norm(points, axis=1) > 0.6]
             pos, R = lidar_test.get_vehicle_pose()
-            vehicle_x, vehicle_y = pos[0], pos[1]  
-            veh_xy = np.array([vehicle_x, vehicle_y])
+            vehicle_x, vehicle_y = pos[0], pos[1]
+            veh_xy = np.array([vehicle_x, vehicle_y]) 
 
             # Record stats
             distance_travelled = np.linalg.norm(last_pos - np.array([vehicle_x, vehicle_y]))
             stats_dict['total_length'].append(distance_travelled)
             last_pos = veh_xy.copy() 
 
-            # Get labels for the points cloud
-            world = lidar_test.transform_to_world(points, pos, R)
-            world[:,2] = -world[:,2]
+            points_world = lidar_test.transform_to_world(points, pos, R)
+            points_world[:, 2] = -points_world[:, 2] 
+            labels = np.array(groundseg.run(points_world))
 
             # Populate grid maps based on segmentation.
-            labels = seg.segment(world)
-            for p, lab in zip(world, labels):
-                grid_map_ground.add_point(p[0], p[1], p[2], lab)
-            ground_pts = grid_map_ground.get_label_estimate()
-            ground_pts = filter_points_by_radius(ground_pts, veh_xy, STEP_config['radius_filter'])
-            if ground_pts.size == 0: continue
-            risk_grid, _, _, _ = binned_statistic_2d(
-                ground_pts[:,0], ground_pts[:,1], ground_pts[:,2], statistic='mean', bins=[x_edges, y_edges]
+            for i, point in enumerate(points_world):
+                x, y, z = point
+                if labels[i] == 1:
+                    grid_map_ground.add_point(x, y, z, timestamp)
+                elif z > -pos[2]:
+                    grid_map_obstacle.add_point(x, y, z, timestamp)
+                else:
+                    grid_map_ground.add_point(x, y, z, timestamp)
+            ground_points = grid_map_ground.get_height_estimate()
+            obstacle_points = grid_map_obstacle.get_height_estimate()
+            ground_points = filter_points_by_radius(ground_points, veh_xy, STEP_config['radius_filter'])
+            if ground_points.size == 0: continue
+            Z_ground, _, _, _ = binned_statistic_2d(
+                ground_points[:, 0], ground_points[:, 1], ground_points[:, 2], statistic='mean', bins=[x_edges, y_edges]
             )
 
-            # Calculate risk grid            
-            risk_grid = interpolate_in_radius(risk_grid, STEP_config['interpolate_radius'])
-            risk_grid = compute_cvar_cellwise(risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
-            risk_grid = np.nan_to_num(risk_grid, nan=1.0)
-            dist = np.hypot(X - vehicle_x, Y - vehicle_y)
-            risk_grid[dist.T > STEP_config['distance_ignored']] = np.nan
+            # Calculate risk grids.
+            non_nan_indices = np.argwhere(~np.isnan(Z_ground))
+            step_risk_grid, slope_risk_grid = calculate_combined_risks(
+                Z_ground, non_nan_indices, max_height_diff=STEP_config['max_height_diff'], max_slope_degrees=STEP_config['max_slope_degrees'], radius=STEP_config['risk_radius']
+            )
+            combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
+            masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask) * STEP_config['step_weight']
+            masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask) * STEP_config['slope_weight']
+            sum_grid = np.ma.filled(masked_step_risk, 0) + np.ma.filled(masked_slope_risk, 0)
+            both_nan_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
+            total_risk_grid = np.where(both_nan_mask, np.nan, sum_grid)
 
+            # Incorporate obstacle risk.
+            if obstacle_points.size != 0:
+                obstacle_points = filter_points_by_radius(obstacle_points, veh_xy, STEP_config['radius_filter'])
+                if obstacle_points.size != 0:
+                    obs_x_idx = np.clip(np.digitize(obstacle_points[:, 0], x_edges) - 1, 0, len(x_mid)-1)
+                    obs_y_idx = np.clip(np.digitize(obstacle_points[:, 1], y_edges) - 1, 0, len(y_mid)-1)
+                    total_risk_grid[obs_x_idx, obs_y_idx] = 3.0
 
+            # Apply fading and transform risk values.
+            total_risk_grid = fade_with_distance_transform(total_risk_grid,
+                                                           high_threshold=0.65,
+                                                           fade_scale=4.0,
+                                                           sigma=3.0)
+            max_risk = np.nanmax(total_risk_grid)
+            threshold = 0.20 * max_risk
+            mask = total_risk_grid > threshold
+            total_risk_grid[mask] = np.exp(total_risk_grid[mask])
+            total_risk_grid = interpolate_in_radius(total_risk_grid, STEP_config['interpolate_radius'])
+            masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
+            risk_grid = compute_cvar_cellwise(masked_total_risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
+            risk_grid = risk_grid.filled(0.50)
+
+            # Mask cells far from the vehicle.
+            distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
+            risk_grid[distance_from_vehicle.T > STEP_config['distance_ignored']] = np.nan
+
+            
             # Check for replan condition - if we close to the temp dest
             trigger_temp_dest = False
             if (temp_dest is None or 
@@ -547,14 +595,14 @@ if __name__ == '__main__':
                 ctr.throttle = 0.0
             else:
                 ctr.steering = float(np.clip(δ_cmd / nmpc.delta_max, -1, 1))
-                scale        = 1 - 0.8*abs(err_ψ)/np.deg2rad(20)
+                scale        = 1 - 0.8*abs(err_ψ)/np.deg2rad(25)
                 ctr.throttle = float(np.clip(v_cmd*scale / nmpc.V_max, 0, nmpc.V_max))
             lidar_test.client.setCarControls(ctr)
 
             ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
             ax.legend()
-            # plt.draw(); plt.pause(0.1)
-            
+            plt.draw(); plt.pause(0.1)
+        
             # Record REST INFO
             stats_dict['count'] += 1
             if lidar_test.client.simGetCollisionInfo().has_collided:
@@ -572,5 +620,9 @@ if __name__ == '__main__':
                 print("total_length: ", np.sum(stats_dict['total_length']))
                 lidar_test.client.enableApiControl(False, lidar_test.vehicleName)
                 break
+
+
     finally:
         plt.ioff()
+        # plt.show()
+        # plt.close()
