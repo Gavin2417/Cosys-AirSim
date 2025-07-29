@@ -367,7 +367,7 @@ STEP_config ={
 
     # others for replan:
     'HIGH_RISK': 0.6,
-
+    'visualize': False
 }
 if __name__ == '__main__':
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
@@ -388,12 +388,12 @@ if __name__ == '__main__':
                         V_max=STEP_config['Vmax-nmpc'],
                         delta_max=np.deg2rad(STEP_config['delta-nmpc']))
     ctr = airsim.CarControls()
-    cmap = LinearSegmentedColormap.from_list("gray_yellow_red",
-               [(0.5,0.5,0.5),(1,1,0),(1,0,0)], N=10)
-    fig, ax = plt.subplots(); plt.ion(); 
-    
-    # Define variables
-    colorbar = None
+
+    if STEP_config['visualize']:
+        cmap = LinearSegmentedColormap.from_list("gray_yellow_red",
+                [(0.5,0.5,0.5),(1,1,0),(1,0,0)], N=10)
+        fig, ax = plt.subplots(); plt.ion(); 
+        colorbar = None
     prev_grid = None
     prev_path = None
     temp_dest = None
@@ -498,31 +498,15 @@ if __name__ == '__main__':
             if path_idx is not None:
                 prev_path = path_idx.copy()
                 prev_grid = risk_grid.copy()
-
-            # Visualization
-            ax.clear()
-            c = ax.pcolormesh(Y, X, risk_grid.T, shading='auto', cmap=cmap, alpha=0.7)
-            if colorbar is None:
-                colorbar = fig.colorbar(c, ax=ax, label='Risk')
-            else:
-                colorbar.update_normal(c)
-            ax.scatter(vehicle_y, vehicle_x, c='green', s=50, label='Vehicle')
-            ax.scatter(destination_point[1], destination_point[0], c='red', s=50, label='Goal')
-            ax.scatter(temp_dest[1], temp_dest[0], c='red', s=50, label='Goal')
-            
             raw_coords = np.array([[x_mid[r], y_mid[c]] for r, c in path_idx])
             smoothed_path = smooth_path(raw_coords, window_size=5)
-            ax.plot(smoothed_path[:,1],
-                    smoothed_path[:,0],
-                    color='blue',
-                    linewidth=2,
-                    label='Smoothed A* Path')
-            
-            # --- after you have `smoothed_path` and time dt  ---
+     
+            # Compute dt
             dt_loop = max(min(time.time() - prev_t, 0.2), 0.05)
             prev_t  = time.time()
 
-            # 1) extract NMPC reference: next N waypoints
+            ## NMPC
+            #  extract NMPC reference: next N waypoints
             d2sp    = np.linalg.norm(smoothed_path - pos[:2], axis=1)
             i0      = np.argmin(d2sp)
             ref_pts = smoothed_path[i0+1 : i0+1+nmpc.N]
@@ -551,9 +535,21 @@ if __name__ == '__main__':
                 ctr.throttle = float(np.clip(v_cmd*scale / nmpc.V_max, 0, nmpc.V_max))
             lidar_test.client.setCarControls(ctr)
 
-            ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
-            ax.legend()
-            # plt.draw(); plt.pause(0.1)
+            # Visualization
+            if STEP_config['visualize']:
+                ax.clear()
+                c = ax.pcolormesh(Y, X, risk_grid.T, shading='auto', cmap=cmap, alpha=0.7)
+                if colorbar is None:
+                    colorbar = fig.colorbar(c, ax=ax, label='Risk')
+                else:
+                    colorbar.update_normal(c)
+                ax.scatter(vehicle_y, vehicle_x, c='green', s=50, label='Vehicle')
+                ax.scatter(destination_point[1], destination_point[0], c='red', s=50, label='Goal')
+                ax.scatter(temp_dest[1], temp_dest[0], c='BLACK', s=30, marker='s', linewidth=0.15, label='Temp Goal')
+                ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='Smoothed A* Path')
+                ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
+                ax.legend()
+                plt.draw(); plt.pause(0.1)
             
             # Record REST INFO
             stats_dict['count'] += 1
@@ -573,4 +569,5 @@ if __name__ == '__main__':
                 lidar_test.client.enableApiControl(False, lidar_test.vehicleName)
                 break
     finally:
-        plt.ioff()
+        print("--------------Done--------------")
+        # plt.ioff()
