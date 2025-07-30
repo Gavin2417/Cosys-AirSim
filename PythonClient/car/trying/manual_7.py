@@ -1,87 +1,115 @@
-
 import os
 import time
 import heapq
+
 import cosysairsim as airsim
 import numpy as np
 import numpy.ma as ma
 import open3d as o3d
 import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
-from scipy.interpolate import griddata
-from scipy.stats import binned_statistic_2d
 from matplotlib.colors import LinearSegmentedColormap
+
+import casadi as ca
 
 from linefit import ground_seg
 from function2 import calculate_combined_risks, compute_cvar_cellwise
-import casadi as ca
+
+
 class NMPCController:
-    def __init__(self, dt=0.1, horizon=10, L=0.8):
-        self.dt = dt
+    def __init__(self, horizon=10, dt=0.1, wheelbase=0.5, V_max=5.0, delta_max=np.deg2rad(25)):
         self.N = horizon
-        self.L = L
-        self.steer_limit = 1.0
-        self.throttle_limit = 1.0
-        self.w_pos = 10
-        self.w_yaw = 1
-        self.w_vel = 1
-        self.w_u = 0.1
-        self.w_du = 1.0
-        self._build_solver()
+        self.dt = dt
+        self.L = wheelbase
+        self.V_max = V_max
+        self.delta_max = delta_max
+        
+        # Weights
+        self.Q_x = 1.0; self.Q_y = 1.0; self.Q_psi = 1.0
+        self.R_v = 0.1; self.R_delta = 0.1
+        self.W_first = 5.0
+        
+        # State & control symbols
+        x = ca.SX.sym('x'); y = ca.SX.sym('y'); psi = ca.SX.sym('psi')
+        states = ca.vertcat(x, y, psi)
+        n_states = states.size()[0]
+        v = ca.SX.sym('v'); delta = ca.SX.sym('delta')
+        controls = ca.vertcat(v, delta)
+        n_controls = controls.size()[0]
 
-    def _build_solver(self):
-        N, dt, L = self.N, self.dt, self.L
-        x = ca.SX.sym('x'); y = ca.SX.sym('y'); theta = ca.SX.sym('theta'); v = ca.SX.sym('v')
-        delta = ca.SX.sym('delta'); a = ca.SX.sym('a')
-        state = ca.vertcat(x, y, theta, v)
-        control = ca.vertcat(delta, a)
-        rhs = ca.vertcat(v * ca.cos(theta), v * ca.sin(theta), v / L * ca.tan(delta), a)
-        f = ca.Function("f", [state, control], [rhs])
+        # Kinematic bicycle
+        rhs = ca.vertcat(
+            v * ca.cos(psi),
+            v * ca.sin(psi),
+            v/self.L * ca.tan(delta)
+        )
+        f = ca.Function('f', [states, controls], [rhs])
 
-        X = ca.SX.sym("X", 4, N+1)
-        U = ca.SX.sym("U", 2, N)
-        P = ca.SX.sym("P", 4 + 3*N)  # state + [x,y,yaw]*N
-        obj = 0; g = []
-        for k in range(N):
-            st, con = X[:,k], U[:,k]
-            x_ref, y_ref, yaw_ref = P[4+3*k:4+3*k+3]
-            obj += self.w_pos * ((st[0] - x_ref)**2 + (st[1] - y_ref)**2)
-            obj += self.w_yaw * (st[2] - yaw_ref)**2
-            obj += self.w_u * ca.sumsqr(con)
-            if k > 0:
-                obj += self.w_du * ca.sumsqr(U[:,k] - U[:,k-1])
-            st_next = X[:,k] + dt * f(X[:,k], U[:,k])
-            g.append(X[:,k+1] - st_next)
+        # Decision vars
+        U = ca.SX.sym('U', n_controls, self.N)
+        X = ca.SX.sym('X', n_states, self.N + 1)
+        P = ca.SX.sym('P', n_states + 2*self.N)  # init + traj
 
-        opt_vars = ca.vertcat(X.reshape((-1,1)), U.reshape((-1,1)))
-        nlp = {'f': obj, 'x': opt_vars, 'p': P, 'g': ca.vertcat(*g)}
-        opts = {'ipopt.print_level': 0, 'print_time': 0}
-        self.solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
-        self.nx = 4; self.nu = 2; self.X = X; self.U = U; self.P = P
+        # Build objective & constraints
+        obj = 0
+        g = []
+        g.append(X[:,0] - P[0:n_states])  # init constraint
 
-    def solve(self, state, ref_traj):
-        x0 = np.array(state).flatten()
-        if len(ref_traj) < self.N:
-            ref_traj = np.vstack([ref_traj, np.tile(ref_traj[-1], (self.N - len(ref_traj), 1))])
-        p = np.concatenate([x0] + [r for r in ref_traj[:self.N]])
-        x_init = np.tile(x0.reshape(-1,1), (1,self.N+1))
-        u_init = np.zeros((2,self.N))
+        for k in range(self.N):
+            st = X[:,k]; con = U[:,k]
+            ref_x = P[n_states + 2*k]
+            ref_y = P[n_states + 2*k + 1]
+            w = self.W_first if k == 0 else 1.0
 
-        lbx, ubx = [], []
+            obj += w*self.Q_x*(st[0] - ref_x)**2
+            obj += w*self.Q_y*(st[1] - ref_y)**2
+            obj += w*self.Q_psi*(st[2]
+                                 - ca.atan2(ref_y - st[1], ref_x - st[0]))**2
+            obj += self.R_v*(con[0]/self.V_max)**2
+            obj += self.R_delta*(con[1]/self.delta_max)**2
+
+            # dynamics
+            st_next = X[:,k+1]
+            f_value = f(st, con)
+            st_next_euler = st + self.dt*f_value
+            g.append(st_next - st_next_euler)
+
+        g = ca.vertcat(*g)
+        OPT_vars = ca.vertcat(ca.reshape(X, -1,1),
+                              ca.reshape(U, -1,1))
+        nlp = {'f': obj, 'x': OPT_vars, 'g': g, 'p': P}
+        opts = {'ipopt.max_iter':100, 'ipopt.print_level':0, 'print_time':0}
+        self.solver = ca.nlpsol('solver','ipopt',nlp,opts)
+
+        # Bounds
+        lbx = []; ubx = []
         for _ in range(self.N+1):
-            lbx += [-ca.inf]*4
-            ubx += [ ca.inf]*4
+            lbx += [-ca.inf, -ca.inf, -ca.inf]
+            ubx += [ ca.inf,  ca.inf,  ca.inf]
         for _ in range(self.N):
-            lbx += [-1.0, -1.0]
-            ubx += [ 1.0,  1.0]
+            lbx += [0, -self.delta_max]
+            ubx += [self.V_max, self.delta_max]
+        self.lbx, self.ubx = lbx, ubx
+        self.lbg = [0]*g.size()[0]
+        self.ubg = [0]*g.size()[0]
+
+    def solve(self, x0, ref_traj):
+        p = list(x0) + ref_traj.flatten().tolist()
+        x_init = np.tile(x0, (self.N+1,1))
+        u_init = np.zeros((self.N,2))
+        init_guess = np.concatenate((x_init.flatten(), u_init.flatten()))
 
         sol = self.solver(
-            x0=ca.vertcat(x_init.flatten(), u_init.flatten()),
-            p=p, lbg=0, ubg=0, lbx=lbx, ubx=ubx
+            x0=init_guess,
+            lbx=self.lbx, ubx=self.ubx,
+            lbg=self.lbg, ubg=self.ubg,
+            p=p
         )
-        u = sol['x'][4*(self.N+1):4*(self.N+1)+2]
-        return float(u[0]), float(u[1])
+        u_opt = sol['x'][-2*self.N:].full().reshape(self.N,2)
+        return u_opt[0]
 
+
+# --- Utility & planning ---
 def interpolate_in_radius(grid, radius):
     valid = ~np.isnan(grid)
     coords = np.column_stack(np.where(valid))
@@ -90,31 +118,26 @@ def interpolate_in_radius(grid, radius):
     nan_coords = np.column_stack(np.where(np.isnan(grid)))
     for coord in nan_coords:
         nbrs = tree.query_ball_point(coord, radius)
-        if not nbrs:
-            continue
-        w_vals = []
-        wts    = []
+        if not nbrs: continue
+        w_vals, wts = [], []
         for i in nbrs:
             d = np.linalg.norm(coord - coords[i]) + 1e-6
             w = 1.0/d
             wts.append(w)
-            w_vals.append(w * values[i])
-        grid[coord[0], coord[1]] = sum(w_vals)/sum(wts)
+            w_vals.append(w*values[i])
+        grid[tuple(coord)] = sum(w_vals)/sum(wts)
     return grid
 
-
 def filter_points_by_radius(points, center, radius):
-    d = np.linalg.norm(points[:, :2] - center, axis=1)
+    d = np.linalg.norm(points[:,:2] - center, axis=1)
     return points[d <= radius]
 
-# A* helpers
-def is_valid(r,c,g):  return 0<=r<g.shape[0] and 0<=c<g.shape[1]
-def is_unblocked(g,r,c): return not np.isnan(g[r,c]) and g[r,c]<1.0
-def h(r,c,d):      return np.hypot(r-d[0], c-d[1])
+def is_valid(r,c,g):    return 0<=r<g.shape[0] and 0<=c<g.shape[1]
+def is_unblocked(g,r,c):return not np.isnan(g[r,c]) and g[r,c]<1.0
+def h(r,c,d):           return np.hypot(r-d[0], c-d[1])
 
 def trace_path(parents, dest):
-    path = []
-    r,c = dest
+    path = []; r,c = dest
     while True:
         path.append((r,c))
         pr,pc = parents[r,c]
@@ -125,13 +148,12 @@ def trace_path(parents, dest):
 def a_star_search(risk, start, dest):
     R,C = risk.shape
     open_list = [(0.0, start)]
-    g = np.full((R,C), np.inf)
-    g[start] = 0
-    f = np.full((R,C), np.inf)
-    f[start] = h(*start, dest)
+    g = np.full((R,C), np.inf); g[start] = 0
+    f = np.full((R,C), np.inf); f[start] = h(*start, dest)
     parents = np.zeros((R,C,2), dtype=int)
     for i in range(R):
-        for j in range(C): parents[i,j] = (i,j)
+        for j in range(C):
+            parents[i,j] = (i,j)
 
     while open_list:
         _, (r,c) = heapq.heappop(open_list)
@@ -148,19 +170,17 @@ def a_star_search(risk, start, dest):
                     heapq.heappush(open_list, (f[nr,nc], (nr,nc)))
     return None
 
-
 def smooth_path(path, window_size=5):
-    p = np.array(path)
-    n = len(p)
-    if n<window_size: return p
+    p = np.array(path); n = len(p)
+    if n < window_size: return p
     if window_size%2==0: window_size+=1
     hw = window_size//2
     sm = []
     for i in range(n):
-        start = max(0,i-hw)
-        end   = min(n, i+hw+1)
+        start = max(0, i-hw); end = min(n, i+hw+1)
         sm.append(p[start:end].mean(axis=0))
     return np.array(sm)
+
 
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
@@ -171,14 +191,13 @@ class lidarTest:
         self.lastlidarTimeStamp = 0
 
     def get_data(self, gpulidar=True):
-        if gpulidar:
-            d = self.client.getGPULidarData(self.lidarName, self.vehicleName)
-        else:
-            d = self.client.getLidarData(self.lidarName, self.vehicleName)
-        if d.time_stamp==self.lastlidarTimeStamp:
+        d = (self.client.getGPULidarData(self.lidarName, self.vehicleName)
+             if gpulidar else
+             self.client.getLidarData(self.lidarName, self.vehicleName))
+        if d.time_stamp == self.lastlidarTimeStamp:
             return None, None
         self.lastlidarTimeStamp = d.time_stamp
-        if len(d.point_cloud)<2:
+        if len(d.point_cloud) < 2:
             return None, None
         pts = np.array(d.point_cloud, dtype=np.float32)
         dims = 5 if gpulidar else 3
@@ -192,8 +211,8 @@ class lidarTest:
         pos = np.array([p.position.x_val,
                         p.position.y_val,
                         p.position.z_val])
-        q  = p.orientation
-        R  = self.quaternion_to_rotation_matrix(q)
+        q = p.orientation
+        R = self.quaternion_to_rotation_matrix(q)
         return pos, R
 
     def quaternion_to_rotation_matrix(self, q):
@@ -203,9 +222,11 @@ class lidarTest:
             [2*qx*qy+2*qz*qw, 1-2*qx*qx-2*qz*qz,     2*qy*qz-2*qx*qw],
             [2*qx*qz-2*qy*qw,   2*qy*qz+2*qx*qw,   1-2*qx*qx-2*qy*qy],
         ])
+
     def transform_to_world(self, points, position, rotation_matrix):
         points_rotated = np.dot(points, rotation_matrix.T)
         return points_rotated + position
+
 
 class GridMap:
     def __init__(self, resolution):
@@ -222,128 +243,204 @@ class GridMap:
             out.append([gx*self.resolution, gy*self.resolution, np.mean(zs)])
         return np.array(out)
 
+
 def main():
-    # mpc = NMPCController()
-    print("here")
-    # AirSim & Lidar
+    nmpc = NMPCController(horizon=10, dt=0.1, wheelbase=0.25, V_max=0.4)
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
 
-    # Grid maps & segmentation
     ground_map   = GridMap(0.1)
     obstacle_map = GridMap(0.1)
     base = os.path.dirname(__file__)
     cfg  = os.path.join(base, '../assets/config.toml')
-    if os.path.exists(cfg): groundseg = ground_seg(cfg)
+    if os.path.exists(cfg):
+        groundseg = ground_seg(cfg)
     else:
         print(f"No config at {cfg}, using defaults.")
         groundseg = ground_seg()
 
-    # Plot setup
     fig, ax = plt.subplots()
     plt.ion()
     cbar = None
 
-    # Manual world path
-    manual_world = [(-1,0), (0,0), (1,0), (2,0), (3,0), (4,0), (5,0),
-                    (6,0), (7,0), (8,0), (8,-1),(8,-2),(8,-3),(8,-4),(8,-5),(9,-5),(10,-5),(10,-6)]
+    dest = np.array([10, -5])
+    ctr = airsim.CarControls()
 
     try:
         while True:
             pts, ts = lidar_test.get_data(gpulidar=True)
-            if pts is None: continue
+            if pts is None:
+                continue
 
-            # World coords
+            # Transform to world
             pos, R = lidar_test.get_vehicle_pose()
             pts_w = lidar_test.transform_to_world(pts[:,:3], pos, R)
             pts_w[:,2] *= -1
             labels = np.array(groundseg.run(pts_w))
 
             # Populate maps
-            for p,lab in zip(pts_w, labels):
-                if lab==1:      ground_map.add_point(*p, ts)
-                elif p[2] > -pos[2]: obstacle_map.add_point(*p, ts)
-                else:           ground_map.add_point(*p, ts)
+            for p, lab in zip(pts_w, labels):
+                if lab == 1:
+                    ground_map.add_point(*p, ts)
+                elif p[2] > -pos[2]:
+                    obstacle_map.add_point(*p, ts)
+                else:
+                    ground_map.add_point(*p, ts)
 
             gpts = filter_points_by_radius(ground_map.get_estimate(), pos[:2], 15)
             x, y, z = gpts.T
 
-            # Grid for risks
-            start = np.array([-1,0]); dest = np.array([10,-5]); m=0.1; M=1
-            mins = np.minimum(start,dest)-1; maxs = np.maximum(start,dest)+1
-            xe = np.arange(mins[0], maxs[0]+m, m)
-            ye = np.arange(mins[1], maxs[1]+m, m)
-            xm = (xe[:-1]+xe[1:])/2; ym = (ye[:-1]+ye[1:])/2
-            X,Y = np.meshgrid(xm, ym)
-            Zg = np.full((len(xm),len(ym)), np.nan)
-            for xi, yi, zi in zip(x,y,z):
-                i = np.digitize(xi, xe)-1; j = np.digitize(yi, ye)-1
-                if 0<=i<len(xm) and 0<=j<len(ym): Zg[i,j]=zi
+            # Build risk grid
+            start0, dest0 = np.array([-1,0]), dest
+            m = 0.1
+            mins = np.minimum(start0, dest0) - 1
+            maxs = np.maximum(start0, dest0) + 1
+            xe = np.arange(mins[0], maxs[0] + m, m)
+            ye = np.arange(mins[1], maxs[1] + m, m)
+            xm = (xe[:-1] + xe[1:]) / 2
+            ym = (ye[:-1] + ye[1:]) / 2
+            X, Y = np.meshgrid(xm, ym)
 
-            sr, sop = calculate_combined_risks(Zg, np.argwhere(~np.isnan(Zg)),
-                                              max_height_diff=0.05,
-                                              max_slope_degrees=30.0,
-                                              radius=0.5)
-            mr = sr; ms = sop  # misaligned names
-            tot = np.ma.mean([ma.masked_invalid(sr), ma.masked_invalid(sop)], axis=0).filled(np.nan)
+            Zg = np.full((len(xm), len(ym)), np.nan)
+            for xi, yi, zi in zip(x, y, z):
+                i = np.digitize(xi, xe) - 1
+                j = np.digitize(yi, ye) - 1
+                if 0 <= i < len(xm) and 0 <= j < len(ym):
+                    Zg[i,j] = zi
 
-            # obstacles
+            sr, sop = calculate_combined_risks(
+                Zg, np.argwhere(~np.isnan(Zg)),
+                max_height_diff=0.05,
+                max_slope_degrees=30.0,
+                radius=0.5
+            )
+            tot = np.ma.mean([
+                ma.masked_invalid(sr),
+                ma.masked_invalid(sop)
+            ], axis=0).filled(np.nan)
+
             obst = filter_points_by_radius(obstacle_map.get_estimate(), pos[:2], 15)
             for ox, oy, _ in obst:
                 i = np.clip(np.digitize(ox, xe)-1, 0, len(xm)-1)
                 j = np.clip(np.digitize(oy, ye)-1, 0, len(ym)-1)
                 tot[i,j] = 1.0
-            print("jhere")
-            # interpolate
+
             tot = interpolate_in_radius(tot, 1.5)
             cvar = compute_cvar_cellwise(ma.masked_invalid(tot), alpha=0.8)
-            dist = np.hypot((X-pos[0]), (Y-pos[1]))
-            cvar[dist.T>13] = np.nan
 
-            # plot risk
+            # Mask far-away cells
+            dist = np.hypot(X - pos[0], Y - pos[1])
+            cvar[dist.T > 13] = np.nan
+
+            # Plot risk heatmap
             ax.clear()
-            cmap = LinearSegmentedColormap.from_list('risk', [(0.5,0.5,0.5),(1,1,0),(1,0,0)])
-            pcm = ax.pcolormesh(xm, ym, cvar.T, shading='auto', cmap=cmap, alpha=0.7)
-            if cbar is None: cbar = fig.colorbar(pcm, ax=ax, label='Risk')
-            else: cbar.update_normal(pcm)
+            cmap = LinearSegmentedColormap.from_list('risk',
+                                                     [(0.5,0.5,0.5),
+                                                      (1,1,0),
+                                                      (1,0,0)])
+            pcm = ax.pcolormesh(xm, ym, cvar.T,
+                                shading='auto',
+                                cmap=cmap,
+                                alpha=0.7)
+            if cbar is None:
+                cbar = fig.colorbar(pcm, ax=ax, label='Risk')
+            else:
+                cbar.update_normal(pcm)
             ax.set_aspect('equal')
 
-            # smooth manual path
-            mw = np.array(manual_world)
-            smp = smooth_path(mw, window_size=5)
-            ax.plot(smp[:,0], smp[:,1], '--m', lw=2, label='Path')
+            # --- A* path planning on cvar grid ---
+            def world2cell(pt, xe_arr, ye_arr):
+                i = np.digitize(pt[0], xe_arr) - 1
+                j = np.digitize(pt[1], ye_arr) - 1
+                i = np.clip(i, 0, len(xm)-1)
+                j = np.clip(j, 0, len(ym)-1)
+                return (i, j)
+
+            start_cell = world2cell(pos[:2], xe, ye)
+            goal_cell  = world2cell(dest,     xe, ye)
+            risk_for_astar = np.nan_to_num(cvar.T, nan=1.0)
+            raw_path = a_star_search(risk_for_astar, start_cell, goal_cell)
+            if raw_path is None:
+                raw_path = [start_cell, goal_cell]
+
+            # Convert to world coordinates
+            path_wc = [(xm[i], ym[j]) for i,j in raw_path]
+
+            # Smooth & densify
+            smooth = smooth_path(path_wc, window_size=5)
+            deltas = np.linalg.norm(np.diff(smooth,axis=0), axis=1)
+            s = np.concatenate(([0], np.cumsum(deltas)))
+            total_len = s[-1]
+            num_dense = len(smooth) * 2
+            s_dense = np.linspace(0, total_len, num_dense)
+            x_dense = np.interp(s_dense, s, smooth[:,0])
+            y_dense = np.interp(s_dense, s, smooth[:,1])
+            dense_path = np.vstack((x_dense, y_dense)).T
+
+            # Plot planned path
+            ax.plot(smooth[:,0], smooth[:,1],
+                    '--m', lw=2, label='Smoothed A*')
+            ax.plot(dense_path[:,0], dense_path[:,1],
+                    ':c', lw=1, label='Dense A*')
             ax.scatter(pos[0], pos[1], c='g', label='Start')
             ax.scatter(dest[0], dest[1], c='r', label='Goal')
             ax.legend()
 
-            # Get vehicle yaw from rotation matrix
-            yaw = np.arctan2(R[1,0], R[0,0])
-            speed = 1.0  # desired speed
+            # Build NMPC reference trajectory
+            dists = np.linalg.norm(dense_path - pos[:2], axis=1)
+            i0 = int(np.argmin(dists))
+            ref_traj = dense_path[i0 : i0 + nmpc.N]
+            if len(ref_traj) < nmpc.N:
+                ref_traj = np.pad(ref_traj,
+                                  ((0, nmpc.N - len(ref_traj)), (0,0)),
+                                  mode='edge')
 
-            # Closest path segment
-            dists = np.linalg.norm(smp[:,:2] - pos[:2], axis=1)
-            i0 = np.argmin(dists)
-            seg = smp[i0:i0+10]
-            if len(seg) < 2:
+            ax.plot(ref_traj[:,0], ref_traj[:,1],
+                    'bo-', linewidth=2, markersize=4, label='NMPC Ref')
+
+            # Control
+            pos, R = lidar_test.get_vehicle_pose()
+            psi = np.arctan2(R[1,0], R[0,0])
+            x0 = [pos[0], pos[1], psi]
+
+            if len(ref_traj) >= 2:
+                next_wp = ref_traj[1]
+            else:
+                next_wp = ref_traj[0]
+
+            dx, dy = next_wp - pos[:2]
+            desired_psi = np.arctan2(dy, dx)
+            angle_err = np.arctan2(np.sin(desired_psi - psi),
+                                   np.cos(desired_psi - psi))
+            big_turn_threshold = np.deg2rad(20)
+
+            if abs(angle_err) > big_turn_threshold:
+                ctr.throttle = 0.0
+                ctr.steering = float(
+                    np.clip(angle_err / big_turn_threshold, -1.0, 1.0))
+                lidar_test.client.setCarControls(ctr)
+                plt.pause(0.1)
                 continue
 
-            # Heading for each path segment
-            dxy = np.diff(seg[:,:2], axis=0)
-            yaws = np.arctan2(dxy[:,1], dxy[:,0])
-            yaws = np.append(yaws, yaws[-1])
-            ref_traj = np.hstack([seg[:,:2], yaws[:,None]])
+            v_cmd, delta_cmd = nmpc.solve(x0, ref_traj)
+            speed_scale = 1.0 - 0.8 * min(abs(angle_err) / big_turn_threshold, 1.0)
+            v_cmd_adj = v_cmd * speed_scale
 
-            # Solve MPC
-            steer, throttle = mpc.solve([pos[0], pos[1], yaw, speed], ref_traj)
-
-            # Send to AirSim
-            ctr = airsim.CarControls()
-            ctr.steering = np.clip(steer, -1, 1)
-            ctr.throttle = np.clip(throttle, -1, 1)
+            ctr.throttle = float(np.clip(v_cmd_adj / nmpc.V_max, 0.0, 1.0))
+            ctr.steering = float(np.clip(delta_cmd / nmpc.delta_max, -1.0, 1.0))
             lidar_test.client.setCarControls(ctr)
 
+            print(f"x0: {x0}")
+            print(f"NMPC ref[0]: {ref_traj[0]}")
+            print(f"v_cmd: {v_cmd}, delta_cmd: {np.rad2deg(delta_cmd)} deg")
 
-            plt.draw(); plt.pause(0.1)
+            plt.draw()
+            plt.pause(0.1)
 
     finally:
-        plt.ioff(); plt.show()
+        plt.ioff()
+        plt.show()
+
+
+if __name__ == '__main__':
+    main()

@@ -29,7 +29,7 @@ class NMPCController:
         # Weights for cost function
         self.Q_x = 1.0
         self.Q_y = 1.0
-        self.Q_psi = 0.1
+        self.Q_psi = 1.0
         self.R_v = 0.1
         self.R_delta = 0.1
 
@@ -67,6 +67,7 @@ class NMPCController:
         # Initial condition constraint
         g.append(X[:, 0] - P[0:n_states])
 
+        self.W_first = 5.0 
         # Build the MPC optimization
         for k in range(self.N):
             # Reference for current step
@@ -76,9 +77,10 @@ class NMPCController:
             con = U[:, k]
 
             # Cost: tracking + control effort
-            obj += self.Q_x * (st[0] - ref_x)**2
-            obj += self.Q_y * (st[1] - ref_y)**2
-            obj += self.Q_psi * (st[2] - ca.atan2(ref_y - st[1], ref_x - st[0]))**2
+            w = self.W_first if k == 0 else 1.0
+            obj += w *self.Q_x * (st[0] - ref_x)**2
+            obj += w *self.Q_y * (st[1] - ref_y)**2
+            obj += w *self.Q_psi * (st[2] - ca.atan2(ref_y - st[1], ref_x - st[0]))**2
             obj += self.R_v * (con[0]/self.V_max)**2
             obj += self.R_delta * (con[1]/self.delta_max)**2
 
@@ -108,7 +110,7 @@ class NMPCController:
             ubx += [ ca.inf,  ca.inf,  ca.inf]
         # Control bounds
         for _ in range(self.N):
-            lbx += [-self.V_max, -self.delta_max]
+            lbx += [0, -self.delta_max]
             ubx += [ self.V_max,  self.delta_max]
         self.lbx = lbx
         self.ubx = ubx
@@ -296,7 +298,7 @@ class GridMap:
 def main():
    # tune these if needed:
     nmpc = NMPCController(
-        horizon=5,      # how many steps to look ahead
+        horizon=10,      # how many steps to look ahead
         dt=0.1,          # step time [s]
         wheelbase=0.25,   # Husky wheelbase [m]
         V_max=0.4        # max speed [m/s]
@@ -322,7 +324,7 @@ def main():
 
     # Manual world path
     manual_world = [(-1,0), (0,0), (1,0), (2,0), (3,0), (4,0), (5,0),
-                    (6,0), (7,0), (8,0), (8,-1),(8,-2),(8,-3),(8,-4),(8,-5),(9,-5),(10,-5),(10,-6)]
+                    (6,0), (7,0), (8,0), (8,-1),(8,-2),(8,-3),(8,-4),(8,-5),(9,-5),(10,-5),(10,-6),(8,-6),(5,-8)]
     ctr = airsim.CarControls()
     try:
         while True:
@@ -401,24 +403,44 @@ def main():
             dists = np.linalg.norm(mw - pos[:2], axis=1)
             i_closest = int(np.argmin(dists))
 
-            pts_list = smooth.tolist()    # now a Python list of [x,y]
-            ref_list = pts_list[i_closest : i_closest + nmpc.N]
+            path = smooth  # shape (M,2)
+            # compute cumulative arc‐length
+            deltas = np.linalg.norm(np.diff(path, axis=0), axis=1)
+            s = np.concatenate(([0], np.cumsum(deltas)))  # length M
+            total_len = s[-1]
 
-            if len(ref_list) < nmpc.N:
-                ref_list += [pts_list[-1]] * (nmpc.N - len(ref_list))
+            # choose a much finer sampling, e.g. 5× or 10×
+            num_dense = len(path) * 2
+            s_dense = np.linspace(0, total_len, num_dense)
 
-            ref_traj = np.array(ref_list)
+            # interpolate x,y as functions of s
+            x_dense = np.interp(s_dense, s, path[:,0])
+            y_dense = np.interp(s_dense, s, path[:,1])
+            dense_path = np.vstack((x_dense, y_dense)).T  # shape (num_dense,2)
 
+            # find the index in dense_path closest to current pos
+            dists = np.linalg.norm(dense_path - pos[:2], axis=1)
+            i0 = int(np.argmin(dists))
+
+            # now take the first N points directly
+            ref_traj = dense_path[i0 : i0 + nmpc.N]
+            if len(ref_traj) < nmpc.N:
+                ref_traj = np.pad(ref_traj,
+                                ((0, nmpc.N - len(ref_traj)), (0,0)),
+                                mode='edge')
+
+            ref_x, ref_y = ref_traj[:,0], ref_traj[:,1]
+            ax.plot(ref_x, ref_y, 'bo-', label='NMPC Ref', linewidth=2, markersize=4)
             # get current pose
             pos, R = lidar_test.get_vehicle_pose()
             psi = np.arctan2(R[1,0], R[0,0])  # extract yaw from rotation
 
             # current state
             x0 = [pos[0], pos[1], psi]
-            if i_closest + 1 < len(smooth):
-                next_wp = smooth[i_closest + 1]
+            if len(ref_traj) >= 2:
+                next_wp = ref_traj[1]
             else:
-                next_wp = smooth[-1]
+                next_wp = ref_traj[0]
 
             # compute desired heading to that waypoint
             dx, dy = next_wp - pos[:2]
@@ -428,11 +450,11 @@ def main():
                                 np.cos(desired_psi - psi))
 
             # if it’s a “big turn,” just steer in place
-            big_turn_threshold = np.deg2rad(30)   # e.g. 20
-            delta_max = np.deg2rad(30)
+            big_turn_threshold = np.deg2rad(20)   # e.g. 20
+            delta_max = np.deg2rad(20)
             if abs(angle_err) > big_turn_threshold:
                 # stop forward motion
-                ctr.throttle = -0.2
+                ctr.throttle = 0
                 # steering control: map angle_err to [-1,1]
                 ctr.steering = float(np.clip(angle_err / delta_max, -1.0, 1.0))
                 lidar_test.client.setCarControls(ctr)
@@ -441,9 +463,17 @@ def main():
 
             # otherwise, run NMPC as before
             v_cmd, delta_cmd = nmpc.solve(x0, ref_traj)
-            ctr.throttle = float(np.clip(v_cmd / nmpc.V_max,   -1.0, 1.0))
+            speed_scale = 1.0 - 0.8 * min(abs(angle_err) / big_turn_threshold, 1.0)
+            v_cmd_adj = v_cmd * speed_scale
+
+            # apply to car, only forward
+            ctr.throttle = float(np.clip(v_cmd_adj / nmpc.V_max, 0.0, 1.0))
             ctr.steering = float(np.clip(delta_cmd / nmpc.delta_max, -1.0, 1.0))
             lidar_test.client.setCarControls(ctr)
+            print(f"x0: {x0}")
+            print(f"Closest index: {i_closest}")
+            print(f"ref_traj:\n{ref_traj}")
+            print(f"v_cmd: {v_cmd}, delta_cmd: {np.rad2deg(delta_cmd)} deg")
 
             plt.draw(); plt.pause(0.1)
 

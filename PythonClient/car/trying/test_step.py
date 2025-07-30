@@ -1,4 +1,4 @@
-import os, math, time, heapq, json
+import os, math, time, heapq, json, argparse
 import numpy as np
 import open3d as o3d
 import numpy.ma as ma
@@ -11,7 +11,7 @@ import cosysairsim as airsim
 from linefit import ground_seg
 from function5 import calculate_combined_risks, compute_cvar_cellwise
 import casadi as ca
-
+from skimage.graph import route_through_array
 class NMPCController:
     def __init__(self, horizon=10, dt=0.1, wheelbase=0.5,
                  V_max=0.5, delta_max=np.deg2rad(25)):
@@ -239,23 +239,27 @@ class AStarPlanner:
             path.append(cur)
         return path[::-1]
 
-    def plan(self, start, goal):
+    def plan(self, start, goal, MAX_RTSK_VALUE=50):
         # check validity
         for pt in (start, goal):
-            r,c = pt
+            r, c = pt
             if not (0 <= r < self.rows and 0 <= c < self.cols):
                 return None
-            if self.cost_map[r,c] == np.inf:
+            if self.cost_map[r, c] == np.inf:
                 return None
+
+        # Compute risk threshold
+        # max_risk = np.max(self.cost_map[np.isfinite(self.cost_map
+        risk_threshold = 0.8 * MAX_RTSK_VALUE
 
         open_set = []
         g_score = {start: 0.0}
         heapq.heappush(open_set, (self._heuristic(start, goal), start))
         came_from = {}
 
-        # 8‑connected
-        neighbors = [(-1,0),(1,0),(0,-1),(0,1),
-                     (-1,-1),(-1,1),(1,-1),(1,1)]
+        # 8-connected neighbors
+        neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1),
+                    (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
         while open_set:
             f, current = heapq.heappop(open_set)
@@ -264,19 +268,21 @@ class AStarPlanner:
 
             cg = g_score[current]
             for dr, dc in neighbors:
-                nr, nc = current[0]+dr, current[1]+dc
+                nr, nc = current[0] + dr, current[1] + dc
                 if not (0 <= nr < self.rows and 0 <= nc < self.cols):
                     continue
-                step_cost = self.cost_map[nr, nc] * np.hypot(dr, dc)
-                if step_cost == np.inf:
+                cell_cost = self.cost_map[nr, nc]
+                if cell_cost == np.inf or cell_cost >= risk_threshold:
                     continue
+                step_cost = cell_cost * np.hypot(dr, dc)
                 tentative = cg + step_cost
                 neighbor = (nr, nc)
                 if tentative < g_score.get(neighbor, np.inf):
                     g_score[neighbor] = tentative
                     came_from[neighbor] = current
                     heapq.heappush(open_set, (tentative + self._heuristic(neighbor, goal),
-                                              neighbor))
+                                            neighbor))
+
 
         return None
 
@@ -369,10 +375,15 @@ STEP_config ={
 
     # others for replan:
     'HIGH_RISK': 0.6,
+    'MAX_RTSK_VALUE': 50,
     'visualize': False
 
 }
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--xgoal', type=float, default=17.0, help='X coordinate of the goal point')
+    parser.add_argument('--ygoal', type=float, default=-7.0, help='Y coordinate of the goal point')
+    args = parser.parse_args()
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
 
@@ -388,7 +399,7 @@ if __name__ == "__main__":
     # Map setup:
     pos, _ = lidar_test.get_vehicle_pose()
     start_point = pos[:2]
-    destination_point = np.array([17, -7])
+    destination_point = np.array([args.xgoal, args.ygoal])
     x_edges, y_edges, x_mid, y_mid = get_map_setting(start_point, destination_point, margin=STEP_config['grid_margin'], grid_resolution=STEP_config['grid_resolution'])
     X, Y = np.meshgrid(x_mid, y_mid)
     grid_map_ground = GridMap(resolution=STEP_config['grid_resolution'])
@@ -423,7 +434,7 @@ if __name__ == "__main__":
         'dist_to_goal': None,
         'reach_goal': False
     }
-    MAX_ITER = 1500
+    MAX_ITER = 550
     distance_last = np.linalg.norm(destination_point - np.array([pos[0], pos[1]]))
     stats_dict['dist_to_goal'] = distance_last
     last_pos = start_point.copy()
@@ -542,13 +553,29 @@ if __name__ == "__main__":
                 if not needs_replan:
                     path_idx = prev_path
                 else:
-                    path_idx = planner.plan(start_idx, goal_idx)
+                    path_idx = planner.plan(start_idx, goal_idx, STEP_config['MAX_RTSK_VALUE'])
             else:
-                path_idx = planner.plan(start_idx, goal_idx)
+                path_idx = planner.plan(start_idx, goal_idx, STEP_config['MAX_RTSK_VALUE'])
+                        # stash for next iteration
+            
             # stash for next iteration
-            if path_idx is not None:
-                prev_path = path_idx.copy()
-                prev_grid = risk_grid.copy()
+            if path_idx is  None:
+                try:
+                    # Copy the planner's cost map
+                    cost_map = np.copy(planner.cost_map)
+                    max_risk = np.nanmax(risk_grid)
+                    high_risk_thresh = STEP_config['HIGH_RISK'] * max_risk
+                    cost_map[np.isinf(cost_map)] = 1e6
+
+                    # Heavily penalize high-risk areas 
+                    cost_map[risk_grid >= high_risk_thresh] *= 10 
+                    cost_map = np.clip(cost_map, 0, 1e6)
+                    path, _ = route_through_array(cost_map, start_idx, goal_idx, fully_connected=True)
+                    path_idx = path
+                except Exception as e:
+                    path_idx = [(start_idx[0], start_idx[1])]
+            prev_path = path_idx.copy()
+            prev_grid = risk_grid.copy()
             raw_coords = np.array([[x_mid[r], y_mid[c]] for r, c in path_idx])
             smoothed_path = smooth_path(raw_coords, window_size=5)
      
@@ -616,6 +643,7 @@ if __name__ == "__main__":
             elif stats_dict['count'] >= MAX_ITER:
                 lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
                 stats_dict['reach_goal'] = False
+                break
     finally:
         print("-----------------------------------------------")
         print("Reached Destination")
@@ -623,7 +651,7 @@ if __name__ == "__main__":
         print("collision_count: ", stats_dict['collision_count'])
         print("dist_to_goal: ", stats_dict['dist_to_goal'])
         print("total_length: ", np.sum(stats_dict['total_length']))
-        lidar_test.client.enableApiControl(False, lidar_test.vehicleName)
+        # lidar_test.client.enableApiControl(False, lidar_test.vehicleName)
         print("--------------Done--------------")
 
     
