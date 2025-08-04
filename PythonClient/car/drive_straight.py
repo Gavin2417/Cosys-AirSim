@@ -13,7 +13,7 @@ import numpy as np
 #model = load_model(sys.argv[1])
 
 # connect to the AirSim simulator 
-client = airsim.CarClient()
+client = airsim.CarClient(ip="100.123.124.47")
 client.confirmConnection()
 client.enableApiControl(True)
 car_controls = airsim.CarControls()

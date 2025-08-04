@@ -5,7 +5,7 @@ import pprint
 import time
 
 # connect to the AirSim simulator 
-client = airsim.CarClient()
+client = airsim.CarClient(ip="100.123.124.47")
 client.confirmConnection()
 client.enableApiControl(True)
 car_controls = airsim.CarControls()
@@ -16,7 +16,7 @@ client.simPrintLogMessage("Hello", "345", 2)
 
 # go forward
 car_controls.throttle = 0.5
-car_controls.steering = 0
+car_controls.steering = 1
 client.setCarControls(car_controls)
 
 while True:
