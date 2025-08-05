@@ -6,7 +6,7 @@ from utils.config import Config10labels as cfg
 from utils.data_process import DataProcessing as DP
 import open3d as o3d
 class RandlaGroundSegmentor:
-    def __init__(self, ckpt_path='log/checkpoint_ten.tar', device=None, subsample_grid=0.1):
+    def __init__(self, ckpt_path='log/checkpoint_original.tar', device=None, subsample_grid=0.1):
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = Network(cfg).to(self.device)
         ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=True)

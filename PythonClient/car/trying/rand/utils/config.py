@@ -27,7 +27,7 @@ class Config10labels:
     k_n = 16  # KNN
     num_layers = 3  # Number of layers
     num_points = 1024  # Number of input points
-    num_classes = 10  # Number of valid classes
+    num_classes = 50  # Number of valid classes
     sub_grid_size = 0.06  # preprocess_parameter
 
     batch_size = 6  # batch_size during training

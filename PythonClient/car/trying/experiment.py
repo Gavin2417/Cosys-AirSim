@@ -28,7 +28,13 @@ points = [
     (0, -7),
     (9, 5)
 ]
+RESUME_FROM = {
+    "start": (0, -7),
+    "goal": (17, -7),
+    "run": 5  # will start from Run 4 (i.e., skip 1-3)
+}
 
+resume_reached = False
 # Create a log file with timestamp
 log_file = os.path.join(os.path.dirname(__file__), f"step_randla_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
 
@@ -56,10 +62,17 @@ with open(log_file, "w") as log:
 
     for start in points:
         for goal in points:
+            
             if start == goal:
                 continue
-
+            print(f"\n=== Starting tests from {start} to {goal} ===")
             for run in range(1, NUM_RUNS + 1):
+
+                if not resume_reached:
+                    if (start, goal, run) == (RESUME_FROM["start"], RESUME_FROM["goal"], RESUME_FROM["run"]):
+                        resume_reached = True
+                    else:
+                        continue
                 run_header = f"\n=== Run {run} | Start: {start} -> Goal: {goal} ==="
                 print(run_header)
                 log.write(run_header + "\n")

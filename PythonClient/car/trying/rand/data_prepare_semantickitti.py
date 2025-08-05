@@ -9,7 +9,7 @@ from utils.data_process import DataProcessing as DP
 import re
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--src_path', default='data', help='source dataset path [default: None]')
+parser.add_argument('--src_path', default='../data', help='source dataset path [default: None]')
 parser.add_argument('--dst_path', default='output', help='destination dataset path [default: None]')
 parser.add_argument('--grid_size', type=float, default=0.05, help='Subsample Grid Size [default: 0.06]')
 parser.add_argument('--yaml_config', default='utils/semantic-kitti.yaml', help='semantic-kitti.yaml path')
@@ -49,7 +49,7 @@ for seq_id in seq_list:
     for scan_id in range(1, len(names_json)):
    
         pc_path = join(seq_path, f"{scan_id}.ply")
-        label_path = join(seq_path, f"{scan_id}_labels.npy")
+        label_path = join(seq_path, f"{scan_id}_labels_50.npy")
         points = DP.load_pc_kitti(pc_path)
         labels = DP.load_label_kitti(label_path)
         # print('points', points.shape)
