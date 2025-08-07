@@ -1,11 +1,11 @@
 import numpy as np
 import cosysairsim as airsim
 
-import gymnasium
-from gymnasium import spaces
+import gym
+from gym import spaces
 
 
-class AirSimEnv(gymnasium.Env):
+class AirSimEnv(gym.Env):
     metadata = {"render.modes": ["rgb_array"]}
 
     def __init__(self, image_shape):

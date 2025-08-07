@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 import math
 
@@ -406,6 +405,10 @@ class EnvironmentState(MsgpackMixin):
     air_pressure = 0.0
     temperature = 0.0
     air_density = 0.0
+
+class ComputerVisionState(MsgpackMixin):
+    kinematics_estimated = KinematicsState()
+    timestamp = np.uint64(0)
 
 class CarState(MsgpackMixin):
     speed = 0.0

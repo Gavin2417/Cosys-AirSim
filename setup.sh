@@ -6,7 +6,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 pushd "$SCRIPT_DIR" >/dev/null
 
 downloadHighPolySuv=true
-MIN_CMAKE_VERSION=3.10.0
+MIN_CMAKE_VERSION=3.12.0
 function version_less_than_equal_to() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" = "$1"; }
 
 # brew gives error if package is already installed
@@ -174,7 +174,7 @@ echo "Installing Eigen library..."
 
 if [ ! -d "AirLib/deps/eigen3" ]; then
     echo "Downloading Eigen..."
-    wget -O eigen3.zip https://github.com/WouterJansen/eigen/archive/refs/tags/3.4.1.zip
+    wget -O eigen3.zip https://github.com/WouterJansen/eigen/archive/refs/tags/3.4.1r.zip
     unzip -q eigen3.zip -d temp_eigen
     mkdir -p AirLib/deps/eigen3
     mv temp_eigen/eigen*/Eigen AirLib/deps/eigen3

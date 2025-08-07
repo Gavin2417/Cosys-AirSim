@@ -1,5 +1,5 @@
 import setup_path
-import gymnasium
+import gym
 import airgym
 import time
 
@@ -13,7 +13,7 @@ from stable_baselines3.common.callbacks import EvalCallback
 env = DummyVecEnv(
     [
         lambda: Monitor(
-            gymnasium.make(
+            gym.make(
                 "airgym:airsim-drone-sample-v0",
                 ip_address="127.0.0.1",
                 step_length=0.25,
