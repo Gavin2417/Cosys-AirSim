@@ -626,7 +626,7 @@ if __name__ == '__main__':
     })
 
     # write it back out
-    with open(stats_file, "w") as f:
-        json.dump(all_runs, f, indent=2)
+    # with open(stats_file, "w") as f:
+    #     json.dump(all_runs, f, indent=2)
 
     print(f"Saved stats for this run")

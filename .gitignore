@@ -418,3 +418,4 @@ docker/LinuxBlocks/*
 /PythonClient/car/trying/rand/result
 /PythonClient/car/trying/rand/visualize
 *.so
+/Unreal/Environments/Blocks

@@ -1,87 +1,78 @@
 import setup_path
 import cosysairsim as airsim
-import cv2
 import numpy as np
 import os
 import time
 import tempfile
-
+import math
 # connect to the AirSim simulator
 client = airsim.CarClient()
 client.confirmConnection()
-client.enableApiControl(True)
-print("API Control enabled: %s" % client.isApiControlEnabled())
+# client.enableApiControl(True)
 car_controls = airsim.CarControls()
 
-tmp_dir = os.path.join(tempfile.gettempdir(), "airsim_car")
-print ("Saving images to %s" % tmp_dir)
-try:
-    os.makedirs(tmp_dir)
-except OSError:
-    if not os.path.isdir(tmp_dir):
-        raise
 
-for idx in range(3):
-    # get state of the car
-    car_state = client.getCarState()
-    print("Speed %d, Gear %d" % (car_state.speed, car_state.gear))
+# Calculate Euclidean distance
+def euclidean_distance(vec1, vec2):
+    return math.sqrt(
+        (vec2.x_val - vec1.x_val) ** 2 +
+        (vec2.y_val - vec1.y_val) ** 2 +
+        (vec2.z_val - vec1.z_val) ** 2
+    )
 
-    # go forward
-    car_controls.throttle = 0.5
-    car_controls.steering = 0
-    client.setCarControls(car_controls)
-    print("Go Forward")
-    time.sleep(3)   # let car drive a bit
+def GetToNew(client):
+    # Save current pose
+    current_pose = client.simGetVehiclePose()
+    
+    while True:
+        # Move to test position
+        new_position = airsim.Vector3r(0, 0, current_pose.position.z_val)
+        print("New position: ", new_position)
 
-    # Go forward + steer right
-    car_controls.throttle = 0.5
-    car_controls.steering = 1
-    client.setCarControls(car_controls)
-    print("Go Forward, steer right")
-    time.sleep(3)   # let car drive a bit
+        orientation = airsim.Quaternionr(0, 0, 0)
+        new_pose = airsim.Pose(new_position, orientation)
+        client.simSetVehiclePose(new_pose, ignore_collision=False)
+        
+        # Allow some time for potential collision detection
+        time.sleep(1)
+        
+        # Check for collision
+        collision_info = client.simGetCollisionInfo()
+        
+        # If no collision, break the loop
+        if not collision_info.has_collided:
+            break
+        else:
+            # Move back to original position
+            client.simSetVehiclePose(current_pose, ignore_collision=True)
 
-    # go reverse
-    car_controls.throttle = -0.5
-    car_controls.is_manual_gear = True
-    car_controls.manual_gear = -1
-    car_controls.steering = 0
-    client.setCarControls(car_controls)
-    print("Go reverse, steer right")
-    time.sleep(3)   # let car drive a bit
-    car_controls.is_manual_gear = False # change back gear to auto
-    car_controls.manual_gear = 0
+# Check if the target position is obstacle-free
+GetToNew(client)
 
-    # apply brakes
-    car_controls.brake = 1
-    client.setCarControls(car_controls)
-    print("Apply brakes")
-    time.sleep(3)   # let car drive a bit
-    car_controls.brake = 0 #remove brake
+# Get the current car position
+current_pose = client.simGetVehiclePose()
+print("Current car position: ", current_pose.position)
 
-    # get camera images from the car
-    responses = client.simGetImages([
-        airsim.ImageRequest("0", airsim.ImageType.DepthVis),  #depth visualization image
-        airsim.ImageRequest("1", airsim.ImageType.DepthPerspective, True), #depth in perspective projection
-        airsim.ImageRequest("1", airsim.ImageType.Scene), #scene vision image in png format
-        airsim.ImageRequest("1", airsim.ImageType.Scene, False, False)])  #scene vision image in uncompressed RGB array
-    print('Retrieved images: %d' % len(responses))
+# Goal point 
+goal = airsim.Vector3r(4.5, 4.5 ,current_pose.position.z_val)
+goal_pose = airsim.Pose(goal, airsim.Quaternionr(0,0,0))
 
-    for response_idx, response in enumerate(responses):
-        filename = os.path.join(tmp_dir, f"{idx}_{response.image_type}_{response_idx}")
-
-        if response.pixels_as_float:
-            print("Type %d, size %d" % (response.image_type, len(response.image_data_float)))
-            airsim.write_pfm(os.path.normpath(filename + '.pfm'), airsim.get_pfm_array(response))
-        elif response.compress: #png format
-            print("Type %d, size %d" % (response.image_type, len(response.image_data_uint8)))
-            airsim.write_file(os.path.normpath(filename + '.png'), response.image_data_uint8)
-        else: #uncompressed array
-            print("Type %d, size %d" % (response.image_type, len(response.image_data_uint8)))
-            img1d = np.fromstring(response.image_data_uint8, dtype=np.uint8) # get numpy array
-            img_rgb = img1d.reshape(response.height, response.width, 3) # reshape array to 3 channel image array H X W X 3
-            cv2.imwrite(os.path.normpath(filename + '.png'), img_rgb) # write to png
+time.sleep(1)
+# Set the car controls
+# car_controls.steering = 0
+# car_controls.throttle = 1
+# client.setCarControls(car_controls)
+while True:
+    
+    current_pose = client.simGetVehiclePose()
+    print("Goal position: ", goal.to_numpy_array())
+    print("Current position: ", current_pose.position.to_numpy_array())
+    print("Distance to goal1: ", euclidean_distance(goal, current_pose.position))
+    # if euclidean_distance(goal, current_pose.position) <= 4.6:
+    #     break
+    time.sleep(0.5)
 
 #restore to original state
-client.reset()
+# client.reset()
 
 client.enableApiControl(False)
