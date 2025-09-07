@@ -646,8 +646,8 @@ if __name__ == '__main__':
                 # plt.draw(); plt.pause(0.1)
                 if Capturing:
                     path = os.path.join(BASE_DIR, "record/randla", args.name)
-                        if not os.path.exists(path):
-                            os.makedirs(path)
+                    if not os.path.exists(path):
+                        os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
 
                     # save the car state
