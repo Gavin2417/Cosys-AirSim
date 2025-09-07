@@ -49,7 +49,7 @@ for seq_id in seq_list:
     for scan_id in range(1, len(names_json)):
    
         pc_path = join(seq_path, f"{scan_id}.ply")
-        label_path = join(seq_path, f"{scan_id}_labels_50.npy")
+        label_path = join(seq_path, f"{scan_id}_labels_50_2.npy")
         points = DP.load_pc_kitti(pc_path)
         labels = DP.load_label_kitti(label_path)
         # print('points', points.shape)

@@ -18,6 +18,8 @@ os.chdir(rand_dir)
 from predict1 import RandlaGroundSegmentor
 import casadi as ca
 from skimage.graph import route_through_array
+
+
 class NMPCController:
     def __init__(self, horizon=10, dt=0.1, wheelbase=0.5,
                  V_max=0.5, delta_max=np.deg2rad(25)):
@@ -32,36 +34,34 @@ class NMPCController:
         self.R_u      = np.diag([0.01, 0.01])  # v,δ effort
         self.R_du     = 0.05                   # smoothness penalty
 
-         # --- symbols ---
-        x, y, ψ = ca.SX.sym('x'), ca.SX.sym('y'), ca.SX.sym('ψ')
-        states  = ca.vertcat(x, y, ψ)
-        v, δ     = ca.SX.sym('v'), ca.SX.sym('δ')
-        controls = ca.vertcat(v, δ)
+        # symbols
+        x, y, psi = ca.SX.sym('x'), ca.SX.sym('y'), ca.SX.sym('psi')
+        states  = ca.vertcat(x, y, psi)
+        v, dlt  = ca.SX.sym('v'), ca.SX.sym('dlt')
+        controls = ca.vertcat(v, dlt)
 
         # dynamics
-        rhs = ca.vertcat(v*ca.cos(ψ),
-                         v*ca.sin(ψ),
-                         v/self.L * ca.tan(δ))
+        rhs = ca.vertcat(v*ca.cos(psi),
+                         v*ca.sin(psi),
+                         v/self.L * ca.tan(dlt))
         f   = ca.Function('f', [states, controls], [rhs])
 
         # decision variables
         X = ca.SX.sym('X', 3, self.N+1)
         U = ca.SX.sym('U', 2, self.N)
 
-        # parameters: [ x0(3), ref_x/ref_y (2*N), dt_seq (N) ] → total 3+3N
+        # parameters: [ x0(3), ref_x/ref_y (2*N), dt_seq (N) ]
         P = ca.SX.sym('P', 3 + 2*self.N + self.N)
 
         g   = []
         obj = 0
 
-        # initial‐state constraint
+        # initial-state
         g.append(X[:,0] - P[0:3])
 
         for k in range(self.N):
-            # extract references from P
             xr = P[3 + 2*k]
             yr = P[3 + 2*k + 1]
-            # extract dt from P
             dt_k = P[3 + 2*self.N + k]
 
             st = X[:,k]
@@ -69,7 +69,7 @@ class NMPCController:
 
             # tracking cost
             err = st - ca.vertcat(xr, yr,
-                  ca.atan2(yr-st[1], xr-st[0]))
+                                   ca.atan2(yr-st[1], xr-st[0]))
             obj += ca.mtimes([err.T, self.Q_pose, err])
 
             # control effort
@@ -85,7 +85,7 @@ class NMPCController:
             fval    = f(st, uc)
             g.append(st_next - (st + dt_k * fval))
 
-        # terminal cost  (unchanged)
+        # terminal cost
         errT = X[:,self.N] - ca.vertcat(
             P[3+2*(self.N-1)],
             P[3+2*(self.N-1)+1],
@@ -120,14 +120,7 @@ class NMPCController:
         N = self.N
         assert len(dt_seq)==N
 
-        # Pack P = [x0, ref_x/ref_y, dt_seq]
-        p = np.concatenate([
-            x0,
-            ref_traj[:N].reshape(-1),
-            np.array(dt_seq)
-        ])
-
-        # Initial guess
+        p = np.concatenate([x0, ref_traj[:N].reshape(-1), np.array(dt_seq)])
         x_init = np.tile(x0, (N+1,1))
         u_init = np.zeros((N,2))
         init   = np.concatenate([x_init.flatten(), u_init.flatten()])
@@ -205,7 +198,7 @@ class GridMap:
         estimates = []
         for (gx, gy), (z_sum, count) in self.grid.items():
             # get rhe mean label
-            mean_label = np.ceil(z_sum/count)
+            mean_label = float(z_sum/count)
             estimates.append([gx * self.resolution, gy * self.resolution, mean_label])
         return np.array(estimates)\
 
@@ -246,7 +239,7 @@ class AStarPlanner:
             path.append(cur)
         return path[::-1]
 
-    def plan(self, start, goal, MAX_RTSK_VALUE=50):
+    def plan(self, start, goal, MAX_RTSK_VALUE=50, max_expansions=20000):
         # check validity
         for pt in (start, goal):
             r, c = pt
@@ -268,11 +261,28 @@ class AStarPlanner:
         neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1),
                     (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
+        expansions = 0
+        best_so_far = None
+        best_f = float('inf')
+
         while open_set:
             f, current = heapq.heappop(open_set)
+
+            # track best seen to allow graceful timeout return
+            if f < best_f:
+                best_f = f
+                best_so_far = current
+
             if current == goal:
                 return self._reconstruct_path(came_from, current)
 
+            if expansions >= max_expansions:
+                # give a partial path toward the best node so far
+                if best_so_far is not None:
+                    return self._reconstruct_path(came_from, best_so_far)
+                return None
+
+            expansions += 1
             cg = g_score[current]
             for dr, dc in neighbors:
                 nr, nc = current[0] + dr, current[1] + dc
@@ -281,16 +291,18 @@ class AStarPlanner:
                 cell_cost = self.cost_map[nr, nc]
                 if cell_cost == np.inf or cell_cost >= risk_threshold:
                     continue
+
+                # small heuristic: skip tiny improvements to curb thrash
                 step_cost = cell_cost * np.hypot(dr, dc)
                 tentative = cg + step_cost
                 neighbor = (nr, nc)
+                if tentative + self._heuristic(neighbor, goal) >= best_f:
+                    continue
+
                 if tentative < g_score.get(neighbor, np.inf):
                     g_score[neighbor] = tentative
                     came_from[neighbor] = current
-                    heapq.heappush(open_set, (tentative + self._heuristic(neighbor, goal),
-                                            neighbor))
-
-
+                    heapq.heappush(open_set, (tentative + self._heuristic(neighbor, goal), neighbor))
         return None
 
 def smooth_path(path, window_size=5):
@@ -350,36 +362,44 @@ def get_map_setting(sp, dp, margin, grid_resolution):
     y_mid = (y_edges[:-1] + y_edges[1:]) / 2
 
     return x_edges, y_edges, x_mid, y_mid
-
+def serialize(obj):
+    if hasattr(obj, "__dict__"):
+        return {k: serialize(v) for k, v in obj.__dict__.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [serialize(v) for v in obj]
+    else:
+        # primitive (int, float, bool, str, etc.)
+        return obj
 STEP_config ={
     # MAP
-    'grid_margin': 5,
+    'grid_margin': 6,
     'grid_resolution': 0.1,
     'radius_filter': 12,
 
     # RISK
     'interpolate_radius': 1.5,
-    'cvar_a': 0.7,
+    'cvar_a': 0.5,
     'cvar_radius': 4.0,
     'distance_ignored': 9.0,
 
     # a star
     'distance_to_temp': 5.0,
-    'distance_to_goal': 0.75,
+    'distance_to_goal': 1,
     # NMPC
     'N-npmc': 20,
-    'Vmax-nmpc': 0.05,
+    'Vmax-nmpc': 0.8,
     'delta-nmpc': 25,
 
     # others for replan:
     'HIGH_RISK': 0.6,
     'MAX_RTSK_VALUE': 50,
-    'visualize': False
+    'visualize': True
 }
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--xgoal', type=float, default=5.0, help='X coordinate of the goal point')
-    parser.add_argument('--ygoal', type=float, default=8.0, help='Y coordinate of the goal point')
+    parser.add_argument('--xgoal', type=float, default=17.0, help='X coordinate of the goal point')
+    parser.add_argument('--ygoal', type=float, default=-7.0, help='Y coordinate of the goal point')
+    parser.add_argument('--name', type=str, default='step', help='Name of the experiment')
     args = parser.parse_args()
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
@@ -401,28 +421,36 @@ if __name__ == '__main__':
     ctr = airsim.CarControls()
 
     if STEP_config['visualize']:
-        cmap = LinearSegmentedColormap.from_list("gray_yellow_red",
-                [(0.5,0.5,0.5),(1,1,0),(1,0,0)], N=10)
+        colors = [
+            (0.5, 0.5, 0.5),  # gray
+            (1.0, 1.0, 0.0),  # yellow
+            (1.0, 0.5, 0.0),  # orange
+            (1.0, 0.0, 0.0),  # red
+            (0.0, 0.0, 0.0),  # black
+        ]
+        cmap = LinearSegmentedColormap.from_list(
+            "gray_yellow_orange_red_black", colors, N=50
+        )
         fig, ax = plt.subplots(); plt.ion(); 
         colorbar = None
     prev_grid = None
     prev_path = None
-    temp_dest = None
-
-    # build a 5×5 connectivity for a radius≈2 square; you can also use a circular structuring element if you want Euclidean radius.
+    temp_goal_idx = None         
+    temp_dest_xy  = None  
+    i0_prev = 0
+    # build a 5×5 connectivity for a radius≈2 square;
     struct = generate_binary_structure(2,1)
-    mask_elem = binary_dilation(np.zeros((5,5), bool), 
-                                structure=struct, 
-                                iterations=2)
     prev_t = time.time()
     stats_dict ={
         'count': 0,
         'collision_count':0,
         'total_length':[],
         'dist_to_goal': None,
-        'reach_goal': False
+        'reach_goal': False,
+        'current_pos': None
     }
-    MAX_ITER = 550
+    Capturing = True
+    MAX_ITER = 350
     distance_last = np.linalg.norm(destination_point - np.array([pos[0], pos[1]]))
     stats_dict['dist_to_goal'] = distance_last
     last_pos = start_point.copy()
@@ -462,45 +490,53 @@ if __name__ == '__main__':
             # Calculate risk grid            
             risk_grid = interpolate_in_radius(risk_grid, STEP_config['interpolate_radius'])
             risk_grid = compute_cvar_cellwise(risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
-            risk_grid = np.nan_to_num(risk_grid, nan=1.0)
+            risk_grid = np.nan_to_num(risk_grid, nan=25)
             dist = np.hypot(X - vehicle_x, Y - vehicle_y)
             risk_grid[dist.T > STEP_config['distance_ignored']] = np.nan
 
-
-            # Check for replan condition - if we close to the temp dest
             trigger_temp_dest = False
-            if (temp_dest is None or 
-                np.hypot(vehicle_x - temp_dest[0], vehicle_y - temp_dest[1]) < STEP_config['distance_to_temp']):
-
-                valid = np.argwhere(~np.isnan(risk_grid))
+            valid = np.argwhere(~np.isnan(risk_grid))
+            if temp_goal_idx is None or (temp_dest_xy is not None and
+                                         np.hypot(vehicle_x - temp_dest_xy[0],
+                                                  vehicle_y - temp_dest_xy[1]) < STEP_config['distance_to_temp']) or stats_dict['count'] %15 ==0:
                 if valid.size > 0:
-                    # find the valid cell nearest the true goal
                     centers = np.column_stack((x_mid[valid[:,0]], y_mid[valid[:,1]]))
                     dists_to_goal = np.linalg.norm(centers - destination_point, axis=1)
                     best = valid[np.argmin(dists_to_goal)]
-                    temp_dest = (x_edges[best[0]], y_edges[best[1]])
+                    temp_goal_idx = (int(best[0]), int(best[1]))
+                    temp_dest_xy  = (float(x_mid[temp_goal_idx[0]]),
+                                     float(y_mid[temp_goal_idx[1]]))
                     trigger_temp_dest = True
 
-            # Plan A* Star
+   
+            rows, cols = risk_grid.shape
+            raw_si = np.digitize(vehicle_x, x_edges) - 1
+            raw_sj = np.digitize(vehicle_y, y_edges) - 1
+            start_idx = (int(np.clip(raw_si, 0, rows-1)),
+                         int(np.clip(raw_sj, 0, cols-1)))
+
+            if temp_goal_idx is None:
+                goal_idx = start_idx
+            else:
+                gi, gj = temp_goal_idx
+                goal_idx = (int(np.clip(gi, 0, rows-1)),
+                            int(np.clip(gj, 0, cols-1)))
+
+            # ------------ plan ------------
             planner = AStarPlanner(risk_grid)
-            start_idx = (np.digitize(vehicle_x, x_edges) - 1,
-                         np.digitize(vehicle_y, y_edges) - 1)
-            goal_idx = (np.digitize(temp_dest[0], x_edges) - 1,
-                        np.digitize(temp_dest[1], y_edges) - 1)
+
             if prev_path is not None and not trigger_temp_dest:
-                # Compute a high‐risk mask (True where risk ≥ 0.6) & Dilate it by 2 cells
                 max_risk_value = np.nanmax(risk_grid)
-                hr = (risk_grid >= STEP_config['HIGH_RISK']* max_risk_value)
+                hr = (risk_grid >= STEP_config['HIGH_RISK']*max_risk_value)
                 hr_dilated = binary_dilation(hr, structure=struct, iterations=3)
 
-                # Check if any of our old path indices hit the dilated high‐risk area
                 needs_replan = False
-                for (r,c) in prev_path:
-                    # make sure (r,c) in bounds
+                for (r, c) in prev_path:
                     if 0 <= r < hr_dilated.shape[0] and 0 <= c < hr_dilated.shape[1]:
                         if hr_dilated[r, c]:
                             needs_replan = True
                             break
+
                 if not needs_replan:
                     path_idx = prev_path
                 else:
@@ -508,52 +544,71 @@ if __name__ == '__main__':
             else:
                 path_idx = planner.plan(start_idx, goal_idx, STEP_config['MAX_RTSK_VALUE'])
 
-            # stash for next iteration
-            if path_idx is  None:
+            if path_idx is None:
                 try:
-                    # Copy the planner's cost map
                     cost_map = np.copy(planner.cost_map)
-                    max_risk = np.nanmax(risk_grid)
-                    high_risk_thresh = STEP_config['HIGH_RISK'] * max_risk
+                    high_risk_thresh = STEP_config['HIGH_RISK'] * np.nanmax(risk_grid)
                     cost_map[np.isinf(cost_map)] = 1e6
-
-                    # Heavily penalize high-risk areas 
-                    cost_map[risk_grid >= high_risk_thresh] *= 10 
+                    cost_map[risk_grid >= high_risk_thresh] *= 10
                     cost_map = np.clip(cost_map, 0, 1e6)
                     path, _ = route_through_array(cost_map, start_idx, goal_idx, fully_connected=True)
                     path_idx = path
-                except Exception as e:
-                    path_idx = [(start_idx[0], start_idx[1])]
-            prev_path = path_idx.copy()
-            prev_grid = risk_grid.copy()
+                except Exception:
+                    path_idx = [start_idx]
+
+            prev_path = list(path_idx)
             raw_coords = np.array([[x_mid[r], y_mid[c]] for r, c in path_idx])
             smoothed_path = smooth_path(raw_coords, window_size=5)
+
      
             # Compute dt
             dt_loop = max(min(time.time() - prev_t, 0.2), 0.05)
-            prev_t  = time.time()
+            prev_t = time.time()
 
             ## NMPC
-            #  extract NMPC reference: next N waypoints
-            d2sp    = np.linalg.norm(smoothed_path - pos[:2], axis=1)
-            i0      = np.argmin(d2sp)
+                        ## NMPC
+            if len(smoothed_path) == 0:
+                continue
+            # Clamp search anchor to current path length
+            i0_prev = int(np.clip(i0_prev, 0, len(smoothed_path) - 1))
+            dists = np.linalg.norm(smoothed_path - pos[:2], axis=1)
+            SEARCH_BACK, SEARCH_AHEAD = 2, 25
+            s0 = max(i0_prev - SEARCH_BACK, 0)
+            s1 = min(i0_prev + SEARCH_AHEAD, len(smoothed_path) - 1)
+            if s1 < s0:
+                s0, s1 = 0, len(smoothed_path) - 1
+            window = dists[s0:s1+1]
+            if window.size == 0 or not np.isfinite(window).any():
+                i0 = i0_prev
+            else:
+                i0 = s0 + int(np.argmin(window))
+            i0 = max(i0, i0_prev - SEARCH_BACK)   # prevent big backward jumps
+            i0_prev = i0
+
+            # extract NMPC reference: next N waypoints
             ref_pts = smoothed_path[i0+1 : i0+1+nmpc.N]
-            if len(ref_pts) < nmpc.N:
-                ref_pts = np.vstack((
-                    ref_pts,
-                    np.tile(ref_pts[-1], (nmpc.N - len(ref_pts), 1))
-                ))
+            if len(ref_pts) < nmpc.N and len(ref_pts) > 0:
+                ref_pts = np.vstack((ref_pts, np.tile(ref_pts[-1], (nmpc.N - len(ref_pts), 1))))
+            elif len(ref_pts) == 0:
+                ref_pts = np.tile(smoothed_path[-1], (nmpc.N, 1))
 
             # 2) solve NMPC
             psi0 = math.atan2(R[1,0], R[0,0])
             x0   = np.array([vehicle_x, vehicle_y, psi0])
-            v_cmd, δ_cmd = nmpc.solve(x0, ref_pts, [dt_loop]*nmpc.N)
+            try:
+                v_cmd, δ_cmd = nmpc.solve(x0, ref_pts, [dt_loop]*nmpc.N)
+            except Exception:
+                v_cmd, δ_cmd = (0.0, 0.0)
 
-            # 3) “big‐turn” fallback
-            dx, dy       = ref_pts[0] - pos[:2]
-            des_ψ        = math.atan2(dy, dx)
-            err_ψ        = math.atan2(math.sin(des_ψ-psi0),
-                                    math.cos(des_ψ-psi0))
+            # 3) desired heading from path tangent (fix #4)
+            LOOKAHEAD_STEPS = 4
+            j = min(i0 + LOOKAHEAD_STEPS, len(smoothed_path) - 1)
+            dx = smoothed_path[j,0] - smoothed_path[i0,0]
+            dy = smoothed_path[j,1] - smoothed_path[i0,1]
+            des_ψ = math.atan2(dy, dx)
+            err_ψ = math.atan2(math.sin(des_ψ - psi0), math.cos(des_ψ - psi0))
+
+            # your existing big-turn branch (unchanged)
             if abs(err_ψ) > np.deg2rad(20):
                 ctr.steering = np.clip(err_ψ/np.deg2rad(20), -1, 1)
                 ctr.throttle = 0.0
@@ -561,6 +616,7 @@ if __name__ == '__main__':
                 ctr.steering = float(np.clip(δ_cmd / nmpc.delta_max, -1, 1))
                 scale        = 1 - 0.8*abs(err_ψ)/np.deg2rad(20)
                 ctr.throttle = float(np.clip(v_cmd*scale / nmpc.V_max, 0, nmpc.V_max))
+
             lidar_test.client.setCarControls(ctr)
 
             # Visualization
@@ -571,13 +627,35 @@ if __name__ == '__main__':
                     colorbar = fig.colorbar(c, ax=ax, label='Risk')
                 else:
                     colorbar.update_normal(c)
-                ax.scatter(vehicle_y, vehicle_x, c='green', s=50, label='Vehicle')
+                ax.scatter(vehicle_y, vehicle_x, c='green', s=35, label='Vehicle')
                 ax.scatter(destination_point[1], destination_point[0], c='red', s=50, label='Goal')
-                ax.scatter(temp_dest[1], temp_dest[0], c='BLACK', s=30, marker='s', linewidth=0.15, label='Temp Goal')
+                # heading arrow (plot axes are Y on X-axis, X on Y-axis)
+                arrow_len = 0.9
+                dx = arrow_len * np.sin(psi0)  # world dy projected to plot x
+                dy = arrow_len * np.cos(psi0)  # world dx projected to plot y
+                ax.quiver(vehicle_y, vehicle_x, dx, dy,
+                          angles='xy', scale_units='xy', scale=1.2,
+                          color='green', width=0.012,
+                          pivot='tail', headwidth=5, headlength=5, headaxislength=5)
+                if temp_dest_xy is not None:
+                    ax.scatter(temp_dest_xy[1], temp_dest_xy[0], c='black', s=30, marker='s',
+                               linewidth=0.15, label='Temp Goal')
                 ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='Smoothed A* Path')
                 ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
                 ax.legend()
-                plt.draw(); plt.pause(0.1)
+                # plt.draw(); plt.pause(0.1)
+                if Capturing:
+                    path = os.path.join(BASE_DIR, "record/randla", args.name)
+                        if not os.path.exists(path):
+                            os.makedirs(path)
+                    plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
+
+                    # save the car state
+                    car_state = lidar_test.client.getCarState()
+                    car_state_filename = os.path.join(path, f'{stats_dict["count"]}_car_state.json')
+                    car_state_dict = serialize(car_state)
+                    with open(car_state_filename, "w") as f:
+                        json.dump(car_state_dict, f, indent=2)
             
             # Record REST INFO
             stats_dict['count'] += 1
@@ -589,10 +667,12 @@ if __name__ == '__main__':
             if distance_last < STEP_config['distance_to_goal']:
                 lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
                 stats_dict['reach_goal'] = True
+                stats_dict['current_pos'] = [vehicle_x, vehicle_y]
                 break
             elif stats_dict['count'] >= MAX_ITER:
                 lidar_test.client.setCarControls(airsim.CarControls(throttle=0, steering=0), lidar_test.vehicleName)
                 stats_dict['reach_goal'] = False
+                stats_dict['current_pos'] = [vehicle_x, vehicle_y]
                 break
     finally:
         print("-----------------------------------------------")
@@ -607,7 +687,7 @@ if __name__ == '__main__':
     
     # path to your “master” stats file
     os.chdir(base)
-    stats_file = os.path.join(project_root, "record/randla_stats.json")
+    stats_file = os.path.join(project_root, "record/randla_stats_1.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
@@ -622,11 +702,12 @@ if __name__ == '__main__':
         "count": stats_dict["count"],
         "collision_count": stats_dict["collision_count"],
         "total_length": stats_dict["total_length"],
-        "dist_to_goal": stats_dict["dist_to_goal"]
+        "dist_to_goal": stats_dict["dist_to_goal"],
+        "current_pos": stats_dict["current_pos"]
     })
 
-    # write it back out
-    # with open(stats_file, "w") as f:
-    #     json.dump(all_runs, f, indent=2)
+    # # write it back out
+    with open(stats_file, "w") as f:
+        json.dump(all_runs, f, indent=2)
 
     print(f"Saved stats for this run")

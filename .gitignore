@@ -419,3 +419,5 @@ docker/LinuxBlocks/*
 /PythonClient/car/trying/rand/visualize
 *.so
 /Unreal/Environments/Blocks
+/PythonClient/car/trying/record/step
+PythonClient/car/trying/step_randla_log.txt
