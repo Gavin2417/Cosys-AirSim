@@ -421,3 +421,4 @@ docker/LinuxBlocks/*
 /Unreal/Environments/Blocks
 /PythonClient/car/trying/record/step
 PythonClient/car/trying/step_randla_log.txt
+/PythonClient/car/trying/record/randla

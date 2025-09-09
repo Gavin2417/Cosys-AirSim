@@ -6,7 +6,7 @@ import cosysairsim as airsim
 from datetime import datetime
 
 # number of runs per start-goal pair
-NUM_RUNS = 1
+NUM_RUNS = 5
 
 # paths to your test scripts
 SCRIPT_STEP = os.path.join(os.path.dirname(__file__), "test_step.py")
