@@ -11,6 +11,7 @@ NUM_RUNS = 5
 # paths to your test scripts
 SCRIPT_STEP = os.path.join(os.path.dirname(__file__), "test_step.py")
 SCRIPT_RANDLA = os.path.join(os.path.dirname(__file__), "test_randla.py")
+SCRIPT_COMBINE = os.path.join(os.path.dirname(__file__), "test_combine.py")
 
 # connect once to AirSim
 client = airsim.CarClient(ip="100.123.124.47")
@@ -75,22 +76,28 @@ with open(log_file, "w") as log:
                 airsim.Vector3r(start[0], start[1], start_z),
                 airsim.Quaternionr(0, 0, 0, 1)
             )
+            # client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
+            # client.simSetVehiclePose(start_pose, ignore_collision=True)
+            # time.sleep(0.1)
+
+            # # 2. Run test_step
+            # print("Running test_step.py...")
+            # run_script(SCRIPT_STEP, goal[0], goal[1], log, label=f"{label}_{run}")
+
+            # # Reset to the same start before test_randla
+            # client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
+            # client.simSetVehiclePose(start_pose, ignore_collision=True)
+            # time.sleep(0.1)
+
+            # # 3. Run test_randla
+            # print("Running test_randla.py...")
+            # run_script(SCRIPT_RANDLA, goal[0], goal[1], log, label=f"{label}_{run}")
             client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
             client.simSetVehiclePose(start_pose, ignore_collision=True)
             time.sleep(0.1)
-
-            # 2. Run test_step
-            print("Running test_step.py...")
-            run_script(SCRIPT_STEP, goal[0], goal[1], log, label=f"{label}_{run}")
-
-            # Reset to the same start before test_randla
-            client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
-            client.simSetVehiclePose(start_pose, ignore_collision=True)
-            time.sleep(0.1)
-
-            # 3. Run test_randla
-            print("Running test_randla.py...")
-            run_script(SCRIPT_RANDLA, goal[0], goal[1], log, label=f"{label}_{run}")
+            # 3. Run test_combine
+            print("Running test_combine.py...")
+            run_script(SCRIPT_COMBINE, goal[0], goal[1], log, label=f"{label}_{run}")
 
     log.write(f"\nAll runs complete at {datetime.now()}\n")
     print("All runs complete.")

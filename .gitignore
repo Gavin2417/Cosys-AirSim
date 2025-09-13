@@ -422,3 +422,4 @@ docker/LinuxBlocks/*
 /PythonClient/car/trying/record/step
 PythonClient/car/trying/step_randla_log.txt
 /PythonClient/car/trying/record/randla
+/PythonClient/car/trying/record

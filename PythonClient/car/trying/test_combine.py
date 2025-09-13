@@ -12,7 +12,12 @@ from linefit import ground_seg
 from function5 import calculate_combined_risks, compute_cvar_cellwise
 import casadi as ca
 from skimage.graph import route_through_array
-
+base = os.path.dirname(__file__)        
+project_root = base
+print(project_root)
+rand_dir = os.path.join(project_root, "rand")
+os.chdir(rand_dir)
+from predict1 import RandlaGroundSegmentor
 class NMPCController:
     def __init__(self, horizon=10, dt=0.1, wheelbase=0.5,
                  V_max=0.5, delta_max=np.deg2rad(25)):
@@ -61,8 +66,10 @@ class NMPCController:
             uc = U[:,k]
 
             # tracking cost
-            err = st - ca.vertcat(xr, yr,
-                                   ca.atan2(yr-st[1], xr-st[0]))
+            # tracking cost (safe heading)
+            des_psi = ca.atan2(yr - st[1], (xr - st[0]) + 1e-8)
+            ang_err = ca.atan2(ca.sin(st[2] - des_psi), ca.cos(st[2] - des_psi))
+            err = ca.vertcat(st[0] - xr, st[1] - yr, ang_err)
             obj += ca.mtimes([err.T, self.Q_pose, err])
 
             # control effort
@@ -177,23 +184,36 @@ class GridMap:
         self.grid = {}
 
     def get_grid_cell(self, x, y):
-        return (round(x / self.resolution, 1), round(y / self.resolution, 1))
+        return (int(np.floor(x / self.resolution)), int(np.floor(y / self.resolution)))
 
-    def add_point(self, x, y, z, timestamp):
+
+    def add_point(self, x, y, z, label):
         cell = self.get_grid_cell(x, y)
         if cell not in self.grid:
-            self.grid[cell] = [z, 1]
+            self.grid[cell] = [z, label, 1]
         else:
             self.grid[cell][0] += z
-            self.grid[cell][1] += 1
+            self.grid[cell][1] += label
+            self.grid[cell][2] += 1
 
     def get_height_estimate(self):
-        estimates = []
-        for (gx, gy), (z_sum, count) in self.grid.items():
+        height_estimates = []
+        label_estimates = []
+        for (gx, gy), (z_sum, label_sum, count) in self.grid.items():
             mean_z = float(z_sum/count)
-            estimates.append([gx * self.resolution, gy * self.resolution, mean_z])
-        return np.array(estimates)
-
+            mean_label = float(label_sum/count)
+            cx = (gx + 0.5) * self.resolution
+            cy = (gy + 0.5) * self.resolution
+            height_estimates.append([cx, cy, mean_z])
+            label_estimates.append([cx, cy, mean_label])
+        return np.array(height_estimates), np.array(label_estimates)
+    def prune_far(self, cx, cy, max_radius_cells):
+        to_del = []
+        for (gx, gy) in self.grid.keys():
+            if (gx - cx)**2 + (gy - cy)**2 > max_radius_cells**2:
+                to_del.append((gx, gy))
+        for k in to_del:
+            del self.grid[k]
 class AStarPlanner:
 
     def __init__(self,
@@ -242,12 +262,13 @@ class AStarPlanner:
 
         # Compute risk threshold
         # max_risk = np.max(self.cost_map[np.isfinite(self.cost_map
-        risk_threshold = 0.8 * MAX_RTSK_VALUE
+        risk_threshold = self.threshold
 
         open_set = []
         g_score = {start: 0.0}
         heapq.heappush(open_set, (self._heuristic(start, goal), start))
         came_from = {}
+        closed = set() 
 
         # 8-connected neighbors
         neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1),
@@ -259,11 +280,9 @@ class AStarPlanner:
 
         while open_set:
             f, current = heapq.heappop(open_set)
-
-            # track best seen to allow graceful timeout return
-            if f < best_f:
-                best_f = f
-                best_so_far = current
+            if current in closed:   # <--- skip if already expanded
+                continue
+            closed.add(current)
 
             if current == goal:
                 return self._reconstruct_path(came_from, current)
@@ -288,8 +307,6 @@ class AStarPlanner:
                 step_cost = cell_cost * np.hypot(dr, dc)
                 tentative = cg + step_cost
                 neighbor = (nr, nc)
-                if tentative + self._heuristic(neighbor, goal) >= best_f:
-                    continue
 
                 if tentative < g_score.get(neighbor, np.inf):
                     g_score[neighbor] = tentative
@@ -405,24 +422,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
+    seg = RandlaGroundSegmentor(device=None, subsample_grid=0.1)
 
     # Initialize ground segmentation.
-    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
-    config_path = os.path.join(BASE_DIR, "../assets/config.toml")
-    if not os.path.exists(config_path):
-        print(f"Config file {config_path} not found, using default parameters")
-        groundseg = ground_seg()
-    else:
-        groundseg = ground_seg(config_path)
 
     # Map setup:
     pos, _ = lidar_test.get_vehicle_pose()
     start_point = pos[:2]
     destination_point = np.array([args.xgoal, args.ygoal])
     x_edges, y_edges, x_mid, y_mid = get_map_setting(start_point, destination_point, margin=STEP_config['grid_margin'], grid_resolution=STEP_config['grid_resolution'])
-    X, Y = np.meshgrid(x_mid, y_mid)
+    X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
     grid_map_ground = GridMap(resolution=STEP_config['grid_resolution'])
-    grid_map_obstacle = GridMap(resolution=STEP_config['grid_resolution'])
+
 
     # Setup NMPC and plot
     nmpc = NMPCController(horizon=STEP_config['N-npmc'],
@@ -472,7 +483,7 @@ if __name__ == "__main__":
                 continue
             
             # Process point cloud.
-            points = np.array(point_cloud_data[:, :3], dtype=np.float64)
+            points = np.asarray(point_cloud_data[:, :3])
             points = points[np.linalg.norm(points, axis=1) > 0.6]
             pos, R = lidar_test.get_vehicle_pose()
             vehicle_x, vehicle_y = pos[0], pos[1]
@@ -483,25 +494,30 @@ if __name__ == "__main__":
             stats_dict['total_length'].append(distance_travelled)
             last_pos = veh_xy.copy() 
 
-            points_world = lidar_test.transform_to_world(points, pos, R)
-            points_world[:, 2] = -points_world[:, 2] 
-            labels = np.array(groundseg.run(points_world))
+            points_world = lidar_test.transform_to_world(points, pos.astype(points.dtype), R)
+            points_world[:, 2] = -points_world[:, 2]
+            labels = seg.segment(points_world)
 
             # Populate grid maps based on segmentation.
             for i, point in enumerate(points_world):
                 x, y, z = point
-                if labels[i] == 1:
-                    grid_map_ground.add_point(x, y, z, timestamp)
-                elif z > -pos[2]:
-                    grid_map_obstacle.add_point(x, y, z, timestamp)
-                else:
-                    grid_map_ground.add_point(x, y, z, timestamp)
-            ground_points = grid_map_ground.get_height_estimate()
-            obstacle_points = grid_map_obstacle.get_height_estimate()
+                grid_map_ground.add_point(x, y, z, labels[i])
+           # vehicle index in grid coordinates
+            veh_gx = int(np.floor(vehicle_x / STEP_config['grid_resolution']))
+            veh_gy = int(np.floor(vehicle_y / STEP_config['grid_resolution']))
+            max_radius_cells = int(STEP_config['radius_filter'] / STEP_config['grid_resolution'])
+            grid_map_ground.prune_far(veh_gx, veh_gy, max_radius_cells)
+
+            ground_points, label_points = grid_map_ground.get_height_estimate()
+
             ground_points = filter_points_by_radius(ground_points, veh_xy, STEP_config['radius_filter'])
+            label_points = filter_points_by_radius(label_points, veh_xy, STEP_config['radius_filter'])
             if ground_points.size == 0: continue
             Z_ground, _, _, _ = binned_statistic_2d(
                 ground_points[:, 0], ground_points[:, 1], ground_points[:, 2], statistic='mean', bins=[x_edges, y_edges]
+            )
+            randla_risk_grid, _, _, _ = binned_statistic_2d(
+                label_points[:,0], label_points[:,1], label_points[:,2], statistic='mean', bins=[x_edges, y_edges]
             )
 
             # Calculate risk grids.
@@ -515,24 +531,17 @@ if __name__ == "__main__":
             sum_grid = np.ma.filled(masked_step_risk, 0) + np.ma.filled(masked_slope_risk, 0)
             both_nan_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
             total_risk_grid = np.where(both_nan_mask, np.nan, sum_grid)
-
-            # Incorporate obstacle risk.
-            if obstacle_points.size != 0:
-                obstacle_points = filter_points_by_radius(obstacle_points, veh_xy, STEP_config['radius_filter'])
-                if obstacle_points.size != 0:
-                    obs_x_idx = np.clip(np.digitize(obstacle_points[:, 0], x_edges) - 1, 0, len(x_mid)-1)
-                    obs_y_idx = np.clip(np.digitize(obstacle_points[:, 1], y_edges) - 1, 0, len(y_mid)-1)
-                    total_risk_grid[obs_x_idx, obs_y_idx] = 3.0
-
             # Apply fading and transform risk values.
-            total_risk_grid = fade_with_distance_transform(total_risk_grid,
-                                                           high_threshold=0.65,
-                                                           fade_scale=4.0,
-                                                           sigma=3.0)
+            
             max_risk = np.nanmax(total_risk_grid)
             threshold = 0.20 * max_risk
             mask = total_risk_grid > threshold
+            # capo
             total_risk_grid[mask] = np.exp(total_risk_grid[mask])
+
+
+
+            total_risk_grid = (total_risk_grid+ randla_risk_grid) / 2.0
             total_risk_grid = interpolate_in_radius(total_risk_grid, STEP_config['interpolate_radius'])
             masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
             risk_grid = compute_cvar_cellwise(masked_total_risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
@@ -540,7 +549,9 @@ if __name__ == "__main__":
 
             # Mask cells far from the vehicle.
             distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
-            risk_grid[distance_from_vehicle.T > STEP_config['distance_ignored']] = np.nan
+            risk_grid[distance_from_vehicle > STEP_config['distance_ignored']] = np.nan
+
+
 
             trigger_temp_dest = False
             valid = np.argwhere(~np.isnan(risk_grid))
@@ -613,12 +624,16 @@ if __name__ == "__main__":
             prev_t = time.time()
 
             ## NMPC
-            # --- stable nearest index with hysteresis (fix #2) ---
+            # --- stable nearest index with hysteresis (robust) ---
             dists = np.linalg.norm(smoothed_path - pos[:2], axis=1)
             SEARCH_BACK, SEARCH_AHEAD = 2, 25
             s0 = max(i0_prev - SEARCH_BACK, 0)
             s1 = min(i0_prev + SEARCH_AHEAD, len(smoothed_path) - 1)
-            i0 = s0 + int(np.argmin(dists[s0:s1+1]))
+            window = dists[s0:s1+1]
+            if window.size == 0 or not np.isfinite(window).any():
+                i0 = i0_prev
+            else:
+                i0 = s0 + int(np.argmin(window))
             i0 = max(i0, i0_prev - SEARCH_BACK)   # prevent big backward jumps
             i0_prev = i0
 
@@ -657,7 +672,7 @@ if __name__ == "__main__":
             # Visualization
             if STEP_config['visualize']:
                 ax.clear()
-                c = ax.pcolormesh(Y, X, risk_grid.T, shading='auto',
+                c = ax.pcolormesh(Y, X, risk_grid, shading='auto',
                                   cmap=cmap, alpha=0.7,
                                   vmin=0, vmax=STEP_config['MAX_RTSK_VALUE'])
                 if colorbar is None:
@@ -687,7 +702,7 @@ if __name__ == "__main__":
                 # ax.legend()
                 # plt.draw(); plt.pause(0.1)
                 if Capturing:
-                    path = os.path.join(BASE_DIR, "record/step_1", args.name)
+                    path = os.path.join(base, "record/combine_1", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -729,7 +744,8 @@ if __name__ == "__main__":
 
     
     # path to your “master” stats file
-    stats_file = os.path.join(BASE_DIR, "record/step_stats_1.json")
+    os.chdir(base)
+    stats_file = os.path.join(base, "record/combine_stats_1.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:

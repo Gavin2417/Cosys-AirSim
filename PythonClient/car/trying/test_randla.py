@@ -622,30 +622,37 @@ if __name__ == '__main__':
             # Visualization
             if STEP_config['visualize']:
                 ax.clear()
-                c = ax.pcolormesh(Y, X, risk_grid.T, shading='auto', cmap=cmap, alpha=0.7)
+                c = ax.pcolormesh(Y, X, risk_grid.T, shading='auto',
+                                  cmap=cmap, alpha=0.7,
+                                  vmin=0, vmax=STEP_config['MAX_RTSK_VALUE'])
                 if colorbar is None:
                     colorbar = fig.colorbar(c, ax=ax, label='Risk')
                 else:
                     colorbar.update_normal(c)
+                colorbar.set_ticks(np.linspace(0, STEP_config['MAX_RTSK_VALUE'], 6))  # 0,10,...,50
                 ax.scatter(vehicle_y, vehicle_x, c='green', s=35, label='Vehicle')
                 ax.scatter(destination_point[1], destination_point[0], c='red', s=50, label='Goal')
                 # heading arrow (plot axes are Y on X-axis, X on Y-axis)
                 arrow_len = 0.9
-                dx = arrow_len * np.sin(psi0)  # world dy projected to plot x
-                dy = arrow_len * np.cos(psi0)  # world dx projected to plot y
+                dx = np.sin(psi0)
+                dy = np.cos(psi0)
+                dx, dy = (dx, dy) / np.hypot(dx, dy) * arrow_len  # normalize for consistency
+
                 ax.quiver(vehicle_y, vehicle_x, dx, dy,
-                          angles='xy', scale_units='xy', scale=1.2,
-                          color='green', width=0.012,
-                          pivot='tail', headwidth=5, headlength=5, headaxislength=5)
+                        angles='xy', scale_units='xy', scale=1.0,
+                        color='green', width=0.012,
+                        pivot='tail', headwidth=5, headlength=5, headaxislength=5)
+
+                ax.set_aspect('equal', adjustable='box')
                 if temp_dest_xy is not None:
                     ax.scatter(temp_dest_xy[1], temp_dest_xy[0], c='black', s=30, marker='s',
                                linewidth=0.15, label='Temp Goal')
                 ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='Smoothed A* Path')
                 ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
-                ax.legend()
+                # ax.legend()
                 # plt.draw(); plt.pause(0.1)
                 if Capturing:
-                    path = os.path.join(base, "record/randla", args.name)
+                    path = os.path.join(base, "record/randla_1", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
