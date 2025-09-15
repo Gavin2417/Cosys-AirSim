@@ -13,119 +13,6 @@ from function5 import *
 import casadi as ca
 from skimage.graph import route_through_array
 
-class NMPCController:
-    def __init__(self, horizon=10, dt=0.1, wheelbase=0.5,
-                 V_max=0.5, delta_max=np.deg2rad(25)):
-        self.N        = horizon
-        self.dt       = dt
-        self.L        = wheelbase
-        self.V_max    = V_max
-        self.delta_max= delta_max
-
-        # Tuning weights
-        self.Q_pose   = np.diag([5, 5, 2])     # x,y,ψ tracking
-        self.R_u      = np.diag([0.01, 0.01])  # v,δ effort
-        self.R_du     = 0.05                   # smoothness penalty
-
-        # symbols
-        x, y, psi = ca.SX.sym('x'), ca.SX.sym('y'), ca.SX.sym('psi')
-        states  = ca.vertcat(x, y, psi)
-        v, dlt  = ca.SX.sym('v'), ca.SX.sym('dlt')
-        controls = ca.vertcat(v, dlt)
-
-        # dynamics
-        rhs = ca.vertcat(v*ca.cos(psi),
-                         v*ca.sin(psi),
-                         v/self.L * ca.tan(dlt))
-        f   = ca.Function('f', [states, controls], [rhs])
-
-        # decision variables
-        X = ca.SX.sym('X', 3, self.N+1)
-        U = ca.SX.sym('U', 2, self.N)
-
-        # parameters: [ x0(3), ref_x/ref_y (2*N), dt_seq (N) ]
-        P = ca.SX.sym('P', 3 + 2*self.N + self.N)
-
-        g   = []
-        obj = 0
-
-        # initial-state
-        g.append(X[:,0] - P[0:3])
-
-        for k in range(self.N):
-            xr = P[3 + 2*k]
-            yr = P[3 + 2*k + 1]
-            dt_k = P[3 + 2*self.N + k]
-
-            st = X[:,k]
-            uc = U[:,k]
-
-            # tracking cost
-            err = st - ca.vertcat(xr, yr,
-                                   ca.atan2(yr-st[1], xr-st[0]))
-            obj += ca.mtimes([err.T, self.Q_pose, err])
-
-            # control effort
-            obj += ca.mtimes([uc.T, self.R_u, uc]) * dt_k
-
-            # smoothness
-            if k>0:
-                du = U[:,k] - U[:,k-1]
-                obj += self.R_du * ca.sumsqr(du)
-
-            # dynamics
-            st_next = X[:,k+1]
-            fval    = f(st, uc)
-            g.append(st_next - (st + dt_k * fval))
-
-        # terminal cost
-        errT = X[:,self.N] - ca.vertcat(
-            P[3+2*(self.N-1)],
-            P[3+2*(self.N-1)+1],
-            0
-        )
-        Qf   = np.diag([10,10,5])
-        obj += ca.mtimes([errT.T, Qf, errT])
-
-        # build the NLP
-        G   = ca.vertcat(*g)
-        OPT = ca.vertcat(ca.reshape(X, -1,1),
-                         ca.reshape(U, -1,1))
-        nlp = {'f': obj, 'x':OPT, 'g':G, 'p':P}
-        opts = {
-            # IPOPT itself
-            'ipopt.print_level':           0,      # no iteration‐by‐iteration printouts
-            'ipopt.sb':                    'yes',  # suppress solver banner
-            'ipopt.print_timing_statistics':'no',  # no timing stats
-            # CasADi wrapper
-            'print_time':                  False,  # don’t print overall timing
-        }
-        self.solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
-
-        # bounds (X free, U in [0,V_max]×[-δ_max,δ_max])
-        nX = 3*(self.N+1)
-        self.lbx = [-ca.inf]*nX + [0, -self.delta_max]*self.N
-        self.ubx = [ ca.inf]*nX + [self.V_max, self.delta_max]*self.N
-        self.lbg = [0]*G.size1()
-        self.ubg = [0]*G.size1()
-
-    def solve(self, x0, ref_traj, dt_seq):
-        N = self.N
-        assert len(dt_seq)==N
-
-        p = np.concatenate([x0, ref_traj[:N].reshape(-1), np.array(dt_seq)])
-        x_init = np.tile(x0, (N+1,1))
-        u_init = np.zeros((N,2))
-        init   = np.concatenate([x_init.flatten(), u_init.flatten()])
-
-        sol = self.solver(x0=init,
-                          lbx=self.lbx, ubx=self.ubx,
-                          lbg=self.lbg, ubg=self.ubg,
-                          p=p)
-        U_opt = sol['x'][-2*N:].full().reshape(N,2)
-        return U_opt[0]
-    
-
 class GridMap:
     def __init__(self, resolution):
         self.resolution = resolution
@@ -182,7 +69,7 @@ STEP_config ={
     'HIGH_RISK': 0.6,
     'MAX_RTSK_VALUE': 50,
     'visualize': True,
-    'Capturing': False,
+    'Capturing': True,
     'MAX_ITER': 350,
 }
 if __name__ == "__main__":
@@ -399,13 +286,19 @@ if __name__ == "__main__":
             prev_t = time.time()
 
             ## NMPC
-            # --- stable nearest index with hysteresis (fix #2) ---
+            if len(smoothed_path) == 0:
+                continue
             dists = np.linalg.norm(smoothed_path - pos[:2], axis=1)
             SEARCH_BACK, SEARCH_AHEAD = 2, 25
             s0 = max(i0_prev - SEARCH_BACK, 0)
             s1 = min(i0_prev + SEARCH_AHEAD, len(smoothed_path) - 1)
-            i0 = s0 + int(np.argmin(dists[s0:s1+1]))
+            window = dists[s0:s1+1]
+            if window.size == 0 or not np.isfinite(window).any():
+                i0 = i0_prev
+            else:
+                i0 = s0 + int(np.argmin(window))
             i0 = max(i0, i0_prev - SEARCH_BACK)   # prevent big backward jumps
+            i0 = int(np.clip(i0, 0, len(smoothed_path) - 1))
             i0_prev = i0
 
             # extract NMPC reference: next N waypoints
@@ -418,7 +311,10 @@ if __name__ == "__main__":
             # 2) solve NMPC
             psi0 = math.atan2(R[1,0], R[0,0])
             x0   = np.array([vehicle_x, vehicle_y, psi0])
-            v_cmd, δ_cmd = nmpc.solve(x0, ref_pts, [dt_loop]*nmpc.N)
+            try:
+                v_cmd, δ_cmd = nmpc.solve(x0, ref_pts, [dt_loop]*nmpc.N)
+            except Exception:
+                v_cmd, δ_cmd = (0.0, 0.0)
 
             # 3) desired heading from path tangent (fix #4)
             LOOKAHEAD_STEPS = 4
@@ -471,9 +367,9 @@ if __name__ == "__main__":
                 ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='Smoothed A* Path')
                 ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
                 # ax.legend()
-                plt.draw(); plt.pause(0.1)
+                # plt.draw(); plt.pause(0.1)
                 if STEP_config['Capturing']:
-                    path = os.path.join(BASE_DIR, "record/step_1", args.name)
+                    path = os.path.join(BASE_DIR, "record/step_2", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -515,7 +411,7 @@ if __name__ == "__main__":
 
     
     # path to your “master” stats file
-    stats_file = os.path.join(BASE_DIR, "record/step_stats_1.json")
+    stats_file = os.path.join(BASE_DIR, "record/step_stats_2.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
@@ -535,7 +431,7 @@ if __name__ == "__main__":
     })
 
     # # write it back out
-    # with open(stats_file, "w") as f:
-    #     json.dump(all_runs, f, indent=2)
+    with open(stats_file, "w") as f:
+        json.dump(all_runs, f, indent=2)
 
     print(f"Saved stats for this run")

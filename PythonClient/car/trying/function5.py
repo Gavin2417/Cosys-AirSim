@@ -3,6 +3,7 @@ import numpy as np
 import open3d as o3d
 import numpy.ma as ma
 import matplotlib.pyplot as plt
+import casadi as ca
 from matplotlib.colors import LinearSegmentedColormap
 from scipy.spatial import cKDTree
 from scipy.stats import norm
@@ -229,7 +230,120 @@ class AStarPlanner:
                     came_from[neighbor] = current
                     heapq.heappush(open_set, (tentative + self._heuristic(neighbor, goal), neighbor))
         return None
-    
+
+class NMPCController:
+    def __init__(self, horizon=10, dt=0.1, wheelbase=0.5,
+                 V_max=0.5, delta_max=np.deg2rad(25)):
+        self.N        = horizon
+        self.dt       = dt
+        self.L        = wheelbase
+        self.V_max    = V_max
+        self.delta_max= delta_max
+
+        # Tuning weights
+        self.Q_pose   = np.diag([5, 5, 2])     # x,y,ψ tracking
+        self.R_u      = np.diag([0.01, 0.01])  # v,δ effort
+        self.R_du     = 0.05                   # smoothness penalty
+
+        # symbols
+        x, y, psi = ca.SX.sym('x'), ca.SX.sym('y'), ca.SX.sym('psi')
+        states  = ca.vertcat(x, y, psi)
+        v, dlt  = ca.SX.sym('v'), ca.SX.sym('dlt')
+        controls = ca.vertcat(v, dlt)
+
+        # dynamics
+        rhs = ca.vertcat(v*ca.cos(psi),
+                         v*ca.sin(psi),
+                         v/self.L * ca.tan(dlt))
+        f   = ca.Function('f', [states, controls], [rhs])
+
+        # decision variables
+        X = ca.SX.sym('X', 3, self.N+1)
+        U = ca.SX.sym('U', 2, self.N)
+
+        # parameters: [ x0(3), ref_x/ref_y (2*N), dt_seq (N) ]
+        P = ca.SX.sym('P', 3 + 2*self.N + self.N)
+
+        g   = []
+        obj = 0
+
+        # initial-state
+        g.append(X[:,0] - P[0:3])
+
+        for k in range(self.N):
+            xr = P[3 + 2*k]
+            yr = P[3 + 2*k + 1]
+            dt_k = P[3 + 2*self.N + k]
+
+            st = X[:,k]
+            uc = U[:,k]
+
+            # tracking cost
+            # tracking cost (safe heading)
+            des_psi = ca.atan2(yr - st[1], (xr - st[0]) + 1e-8)
+            ang_err = ca.atan2(ca.sin(st[2] - des_psi), ca.cos(st[2] - des_psi))
+            err = ca.vertcat(st[0] - xr, st[1] - yr, ang_err)
+            obj += ca.mtimes([err.T, self.Q_pose, err])
+
+            # control effort
+            obj += ca.mtimes([uc.T, self.R_u, uc]) * dt_k
+
+            # smoothness
+            if k>0:
+                du = U[:,k] - U[:,k-1]
+                obj += self.R_du * ca.sumsqr(du)
+
+            # dynamics
+            st_next = X[:,k+1]
+            fval    = f(st, uc)
+            g.append(st_next - (st + dt_k * fval))
+
+        # terminal cost
+        errT = X[:,self.N] - ca.vertcat(
+            P[3+2*(self.N-1)],
+            P[3+2*(self.N-1)+1],
+            0
+        )
+        Qf   = np.diag([10,10,5])
+        obj += ca.mtimes([errT.T, Qf, errT])
+
+        # build the NLP
+        G   = ca.vertcat(*g)
+        OPT = ca.vertcat(ca.reshape(X, -1,1),
+                         ca.reshape(U, -1,1))
+        nlp = {'f': obj, 'x':OPT, 'g':G, 'p':P}
+        opts = {
+            # IPOPT itself
+            'ipopt.print_level':           0,      # no iteration‐by‐iteration printouts
+            'ipopt.sb':                    'yes',  # suppress solver banner
+            'ipopt.print_timing_statistics':'no',  # no timing stats
+            # CasADi wrapper
+            'print_time':                  False,  # don’t print overall timing
+        }
+        self.solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
+
+        # bounds (X free, U in [0,V_max]×[-δ_max,δ_max])
+        nX = 3*(self.N+1)
+        self.lbx = [-ca.inf]*nX + [0, -self.delta_max]*self.N
+        self.ubx = [ ca.inf]*nX + [self.V_max, self.delta_max]*self.N
+        self.lbg = [0]*G.size1()
+        self.ubg = [0]*G.size1()
+
+    def solve(self, x0, ref_traj, dt_seq):
+        N = self.N
+        assert len(dt_seq)==N
+
+        p = np.concatenate([x0, ref_traj[:N].reshape(-1), np.array(dt_seq)])
+        x_init = np.tile(x0, (N+1,1))
+        u_init = np.zeros((N,2))
+        init   = np.concatenate([x_init.flatten(), u_init.flatten()])
+
+        sol = self.solver(x0=init,
+                          lbx=self.lbx, ubx=self.ubx,
+                          lbg=self.lbg, ubg=self.ubg,
+                          p=p)
+        U_opt = sol['x'][-2*N:].full().reshape(N,2)
+        return U_opt[0]  
 ### FUNCTIONS
 
 def smooth_path(path, window_size=5):
