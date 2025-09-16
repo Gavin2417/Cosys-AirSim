@@ -412,3 +412,15 @@ def fade_with_distance_transform(risk_grid, high_threshold=0.4, fade_scale=4.0, 
     dist_map = distance_transform_edt(~high_mask)
     fade_risk = fade_scale * np.exp(-dist_map / sigma)
     return np.maximum(risk_grid, fade_risk)
+
+def in_edges(pt, x_edges, y_edges):
+    return (x_edges[0] <= pt[0] <= x_edges[-1]) and (y_edges[0] <= pt[1] <= y_edges[-1])
+
+def needs_recentering(vehicle_xy, dest_xy, x_edges, y_edges, buffer=1.0):
+    x, y = vehicle_xy
+    near_left   = x < x_edges[0] + buffer
+    near_right  = x > x_edges[-1] - buffer
+    near_bottom = y < y_edges[0] + buffer
+    near_top    = y > y_edges[-1] - buffer
+    dest_out    = not in_edges(dest_xy, x_edges, y_edges)
+    return near_left or near_right or near_bottom or near_top or dest_out

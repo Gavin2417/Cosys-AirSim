@@ -90,7 +90,7 @@ STEP_config ={
     'HIGH_RISK': 0.6,
     'MAX_RTSK_VALUE': 50,
     'visualize': True,
-    'Capturing': True,
+    'Capturing': False,
     'MAX_ITER': 350,
 }
 if __name__ == "__main__":
@@ -163,7 +163,19 @@ if __name__ == "__main__":
             pos, R = lidar_test.get_vehicle_pose()
             vehicle_x, vehicle_y = pos[0], pos[1]
             veh_xy = np.array([vehicle_x, vehicle_y]) 
-
+            # Sliding window: recenter grid if close to an edge or goal is outside
+            if needs_recentering(veh_xy, destination_point, x_edges, y_edges,
+                                buffer=STEP_config['grid_resolution']*10):
+                x_edges, y_edges, x_mid, y_mid = get_map_setting(
+                    veh_xy, destination_point,
+                    margin=STEP_config['grid_margin'],
+                    grid_resolution=STEP_config['grid_resolution']
+                )
+                X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
+                # indices from the old grid are invalid; force fresh target + plan
+                prev_path = None
+                temp_goal_idx = None
+                trigger_temp_dest = True
             # Record stats
             distance_travelled = np.linalg.norm(last_pos - np.array([vehicle_x, vehicle_y]))
             stats_dict['total_length'].append(distance_travelled)
@@ -224,6 +236,13 @@ if __name__ == "__main__":
 
             # Mask cells far from the vehicle.
             distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
+            # Ensure mask shape matches grid shape after any recentering
+            if distance_from_vehicle.shape != risk_grid.shape:
+                if distance_from_vehicle.T.shape == risk_grid.shape:
+                    distance_from_vehicle = distance_from_vehicle.T
+                else:
+                    X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
+                    distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
             risk_grid[distance_from_vehicle > STEP_config['distance_ignored']] = np.nan
 
 
@@ -289,7 +308,10 @@ if __name__ == "__main__":
                     path_idx = path
                 except Exception:
                     path_idx = [start_idx]
-
+            # After you compute path_idx
+            touches_border = any(r in (0, rows-1) or c in (0, cols-1) for r,c in path_idx[-min(10, len(path_idx)):])
+            if touches_border:
+                trigger_temp_dest = True
             prev_path = list(path_idx)
             raw_coords = np.array([[x_mid[r], y_mid[c]] for r, c in path_idx])
             smoothed_path = smooth_path(raw_coords, window_size=5)
@@ -380,7 +402,7 @@ if __name__ == "__main__":
                 ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='Smoothed A* Path')
                 ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
                 # ax.legend()
-                # plt.draw(); plt.pause(0.1)
+                plt.draw(); plt.pause(0.1)
                 if STEP_config['Capturing']:
                     path = os.path.join(base, "record/combine_2", args.name)
                     if not os.path.exists(path):
@@ -444,8 +466,8 @@ if __name__ == "__main__":
         "current_pos": stats_dict["current_pos"]
     })
 
-    # # write it back out
-    with open(stats_file, "w") as f:
-        json.dump(all_runs, f, indent=2)
+    if STEP_config['Capturing']:
+        with open(stats_file, "w") as f:
+            json.dump(all_runs, f, indent=2)
 
     print(f"Saved stats for this run")
