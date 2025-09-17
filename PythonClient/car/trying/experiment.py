@@ -6,7 +6,7 @@ import cosysairsim as airsim
 from datetime import datetime
 
 # number of runs per start-goal pair
-NUM_RUNS = 5
+NUM_RUNS = 1
 
 # paths to your test scripts
 SCRIPT_STEP = os.path.join(os.path.dirname(__file__), "test_step.py")
@@ -25,11 +25,11 @@ saved_z = client.simGetVehiclePose().position.z_val
 # dz applies ONLY to the start Z as an offset from saved_z
 scenarios = [
     # # {"label": "goal", "start": (12, -8), "goal": (-5, -1)},                       # goal : (17,-7) -> (-5,-1)
-    {"label": "normal", "start": (-30, 7), "goal": (-21.5, 17)},                  # Normal
-    {"label": "uneven", "start": (-30, -20), "goal": (-21.5, -6), "dz": -0.5},    # uneven (dz = -0.5)
-    {"label": "ramp", "start": (-31, -44), "goal": (-20, -37)},                   # ramp
-    {"label": "two_height_ramp", "start": (-55, 5), "goal": (-41, 5)},            # two height ramp
-    {"label": "ramp_obstacle", "start": (-33, 40), "goal": (-20, 40)},            # ramp obstacle
+    # {"label": "normal", "start": (-30, 7), "goal": (-21.5, 17)},                  # Normal
+    # {"label": "uneven", "start": (-30, -20), "goal": (-21.5, -6), "dz": -0.5},    # uneven (dz = -0.5)
+    # {"label": "ramp", "start": (-31, -44), "goal": (-20, -37)},                   # ramp
+    # {"label": "two_height_ramp", "start": (-55, 5), "goal": (-41, 5)},            # two height ramp
+    # {"label": "ramp_obstacle", "start": (-33, 40), "goal": (-20, 40)},            # ramp obstacle
     {"label": "hole", "start": (-55.2, -13), "goal": (-41, -13), "dz": -4.5},     # hole (dz = -4.5)
 ]
 
@@ -84,20 +84,21 @@ with open(log_file, "w") as log:
             # print("Running test_step.py...")
             # run_script(SCRIPT_STEP, goal[0], goal[1], log, label=f"{label}_{run}")
 
-            # # Reset to the same start before test_randla
-            # client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
-            # client.simSetVehiclePose(start_pose, ignore_collision=True)
-            # time.sleep(0.1)
-
-            # # 3. Run test_randla
-            # print("Running test_randla.py...")
-            # run_script(SCRIPT_RANDLA, goal[0], goal[1], log, label=f"{label}_{run}")
+            # Reset to the same start before test_randla
             client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
             client.simSetVehiclePose(start_pose, ignore_collision=True)
             time.sleep(0.1)
-            # 3. Run test_combine
-            print("Running test_combine.py...")
-            run_script(SCRIPT_COMBINE, goal[0], goal[1], log, label=f"{label}_{run}")
+
+            # # 3. Run test_randla
+            print("Running test_randla.py...")
+            run_script(SCRIPT_RANDLA, goal[0], goal[1], log, label=f"{label}_{run}")
+
+            # client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
+            # client.simSetVehiclePose(start_pose, ignore_collision=True)
+            # time.sleep(0.1)
+            # # 3. Run test_combine
+            # print("Running test_combine.py...")
+            # run_script(SCRIPT_COMBINE, goal[0], goal[1], log, label=f"{label}_{run}")
 
     log.write(f"\nAll runs complete at {datetime.now()}\n")
     print("All runs complete.")
