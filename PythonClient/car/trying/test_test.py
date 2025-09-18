@@ -19,44 +19,74 @@ rand_dir = os.path.join(project_root, "rand")
 os.chdir(rand_dir)
 from predict1 import RandlaGroundSegmentor
 
-    
+import numpy as np
+
 class GridMap:
     def __init__(self, resolution):
         self.resolution = resolution
-        # Store (sum, count) per cell
+        # self.grid[(gx, gy)] = {
+        #   'label_counts': {label: count, ...},
+        #   'z_sums':       {label: sum_z_for_that_label, ...},
+        #   'total_count':  int
+        # }
         self.grid = {}
 
     def get_grid_cell(self, x, y):
-        return (int(np.floor(x / self.resolution)), int(np.floor(y / self.resolution)))
-
+        return (int(np.floor(x / self.resolution)),
+                int(np.floor(y / self.resolution)))
 
     def add_point(self, x, y, z, label):
         cell = self.get_grid_cell(x, y)
+        lbl = int(label)
         if cell not in self.grid:
-            self.grid[cell] = [z, label, 1]
+            self.grid[cell] = {
+                'label_counts': {lbl: 1},
+                'z_sums':       {lbl: float(z)},
+                'total_count':  1
+            }
         else:
-            self.grid[cell][0] += z
-            self.grid[cell][1] += label
-            self.grid[cell][2] += 1
+            rec = self.grid[cell]
+            rec['label_counts'][lbl] = rec['label_counts'].get(lbl, 0) + 1
+            rec['z_sums'][lbl] = rec['z_sums'].get(lbl, 0.0) + float(z)
+            rec['total_count'] += 1
 
-    def get_height_estimate(self):
-        height_estimates = []
-        label_estimates = []
-        for (gx, gy), (z_sum, label_sum, count) in self.grid.items():
-            mean_z = float(z_sum/count)
-            mean_label = float(label_sum/count)
-            cx = (gx + 0.5) * self.resolution
-            cy = (gy + 0.5) * self.resolution
-            height_estimates.append([cx, cy, mean_z])
-            label_estimates.append([cx, cy, mean_label])
-        return np.array(height_estimates), np.array(label_estimates)
-    def prune_far(self, cx, cy, max_radius_cells):
+    def prune_far(self, cx_cell, cy_cell, max_radius_cells):
         to_del = []
         for (gx, gy) in self.grid.keys():
-            if (gx - cx)**2 + (gy - cy)**2 > max_radius_cells**2:
+            if (gx - cx_cell)**2 + (gy - cy_cell)**2 > max_radius_cells**2:
                 to_del.append((gx, gy))
         for k in to_del:
             del self.grid[k]
+
+    def get_expected_label_and_z_samples(self):
+        """
+        [N,4]: [cx, cy, E[label], E[z]]
+        E[label] = Σ (count/total * label)
+        E[z]     = Σ (count/total * mean_z_for_label)
+        """
+        out = []
+        labels_out = []
+        for (gx, gy), rec in self.grid.items():
+            lc = rec['label_counts']
+            zs = rec['z_sums']
+            tot = float(rec['total_count'])
+            if tot <= 0:
+                continue
+
+            exp_lbl = 0.0
+            exp_z = 0.0
+            for lbl, cnt in lc.items():
+                weight = cnt / tot
+                exp_lbl += weight * lbl
+                mean_z_lbl = zs[lbl] / cnt
+                exp_z += weight * mean_z_lbl
+
+            cx = (gx + 0.5) * self.resolution
+            cy = (gy + 0.5) * self.resolution
+            out.append([cx, cy, float(exp_z)])
+            labels_out.append([cx, cy, float(exp_lbl)])
+        return np.array(out), np.array(labels_out)
+
 
     
 STEP_config ={
@@ -195,7 +225,7 @@ if __name__ == "__main__":
             max_radius_cells = int(STEP_config['radius_filter'] / STEP_config['grid_resolution'])
             grid_map_ground.prune_far(veh_gx, veh_gy, max_radius_cells)
 
-            ground_points, label_points = grid_map_ground.get_height_estimate()
+            ground_points, label_points = grid_map_ground.get_expected_label_and_z_samples()
 
             ground_points = filter_points_by_radius(ground_points, veh_xy, STEP_config['radius_filter'])
             label_points = filter_points_by_radius(label_points, veh_xy, STEP_config['radius_filter'])
