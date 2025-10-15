@@ -6,15 +6,15 @@ import cosysairsim as airsim
 from datetime import datetime
 
 # number of runs per start-goal pair
-NUM_RUNS = 1
+NUM_RUNS = 20
 
 # paths to your test scripts
 SCRIPT_STEP = os.path.join(os.path.dirname(__file__), "test_step.py")
 SCRIPT_RANDLA = os.path.join(os.path.dirname(__file__), "test_randla.py")
-SCRIPT_COMBINE = os.path.join(os.path.dirname(__file__), "test_combine.py")
+SCRIPT_COMBINE = os.path.join(os.path.dirname(__file__), "tt.py")
 
 # connect once to AirSim
-client = airsim.CarClient(ip="100.123.124.47")
+client = airsim.CarClient(ip="192.168.68.101")
 client.confirmConnection()
 client.enableApiControl(True)
 
@@ -24,12 +24,12 @@ saved_z = client.simGetVehiclePose().position.z_val
 # Scenarios: strictly start -> goal
 # dz applies ONLY to the start Z as an offset from saved_z
 scenarios = [
-    # # {"label": "goal", "start": (12, -8), "goal": (-5, -1)},                       # goal : (17,-7) -> (-5,-1)
-    # {"label": "normal", "start": (-30, 7), "goal": (-21.5, 17)},                  # Normal
-    # {"label": "uneven", "start": (-30, -20), "goal": (-21.5, -6), "dz": -0.5},    # uneven (dz = -0.5)
-    # {"label": "ramp", "start": (-31, -44), "goal": (-20, -37)},                   # ramp
-    # {"label": "two_height_ramp", "start": (-55, 5), "goal": (-41, 5)},            # two height ramp
-    # {"label": "ramp_obstacle", "start": (-33, 40), "goal": (-20, 40)},            # ramp obstacle
+    # {"label": "goal", "start": (12, -8), "goal": (-5, -1)},                       # goal : (17,-7) -> (-5,-1)
+    {"label": "normal", "start": (-30, 7), "goal": (-21.5, 17)},                  # Normal
+    {"label": "uneven", "start": (-30, -20), "goal": (-21.5, -6), "dz": -0.5},    # uneven (dz = -0.5)
+    {"label": "ramp", "start": (-31, -44), "goal": (-20, -37)},                   # ramp
+    {"label": "two_height_ramp", "start": (-55, 5), "goal": (-41, 5)},            # two height ramp
+    {"label": "ramp_obstacle", "start": (-33, 40), "goal": (-20, 40)},            # ramp obstacle
     {"label": "hole", "start": (-55.2, -13), "goal": (-41, -13), "dz": -4.5},     # hole (dz = -4.5)
 ]
 
@@ -63,9 +63,11 @@ with open(log_file, "w") as log:
         goal = sc["goal"]
         label = sc.get("label", "scenario")
         dz = sc.get("dz", 0.0)
-
+        num_start_run = 1
+        # if label == "two_height_ramp":
+        #     num_start_run = 11
         print(f"\n=== Starting scenario '{label}': {start} -> {goal} (dz={dz}) ===")
-        for run in range(1, NUM_RUNS + 1):
+        for run in range(num_start_run, NUM_RUNS + 1):
             run_header = f"\n=== Run {run} | [{label}] Start: {start} -> Goal: {goal} | dz={dz} ==="
             print(run_header)
             log.write(run_header + "\n")
@@ -80,25 +82,27 @@ with open(log_file, "w") as log:
             # client.simSetVehiclePose(start_pose, ignore_collision=True)
             # time.sleep(0.1)
 
-            # # 2. Run test_step
+            # #1. Run test_step
             # print("Running test_step.py...")
             # run_script(SCRIPT_STEP, goal[0], goal[1], log, label=f"{label}_{run}")
 
             # Reset to the same start before test_randla
-            client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
-            client.simSetVehiclePose(start_pose, ignore_collision=True)
-            time.sleep(0.1)
-
-            # # 3. Run test_randla
-            print("Running test_randla.py...")
-            run_script(SCRIPT_RANDLA, goal[0], goal[1], log, label=f"{label}_{run}")
-
             # client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
             # client.simSetVehiclePose(start_pose, ignore_collision=True)
             # time.sleep(0.1)
+
+            # # # 2. Run test_randla
+            # print("Running test_randla.py...")
+            # run_script(SCRIPT_RANDLA, goal[0], goal[1], log, label=f"{label}_{run}")
+
+
             # # 3. Run test_combine
-            # print("Running test_combine.py...")
-            # run_script(SCRIPT_COMBINE, goal[0], goal[1], log, label=f"{label}_{run}")
+            client.setCarControls(airsim.CarControls(throttle=0, steering=0), 'CPHusky')
+            client.simSetVehiclePose(start_pose, ignore_collision=True)
+            time.sleep(0.1)
+            # 3. Run test_combine
+            print("Running test_combine.py...")
+            run_script(SCRIPT_COMBINE, goal[0], goal[1], log, label=f"{label}_{run}")
 
     log.write(f"\nAll runs complete at {datetime.now()}\n")
     print("All runs complete.")

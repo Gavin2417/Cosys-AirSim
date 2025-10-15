@@ -9,16 +9,22 @@ from scipy.spatial import cKDTree
 from scipy.stats import norm
 import cosysairsim as airsim
 from scipy.ndimage import distance_transform_edt, binary_dilation, generate_binary_structure
+import numpy as np
+from scipy.ndimage import convolve
+from numba import njit, prange
+
+
 def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.4, max_slope_degrees=30.0, radius=0.3):
     """
-    Vectorized step & slope risk over an 8‐neighbor window.
-    The non_nan_indices argument is kept for compatibility but not used.
+    Step & slope risk over an 8‑neighbor window without wrap-around.
+    - Keeps outputs exactly same shape as Z_grid
+    - Uses per-neighbor spacing (radius for axial, sqrt(2)*radius for diagonals)
+    - non_nan_indices kept for compatibility (unused)
     """
     # Precompute constants
     max_slope_rad = np.deg2rad(max_slope_degrees)
-    diag_dist = np.sqrt(radius**2 + radius**2)
 
-    # Define the 8 neighbor shifts
+    # Define the 8 neighbor shifts and their distances
     shifts = [
         ( 0,  1), ( 0, -1),
         ( 1,  0), (-1,  0),
@@ -26,71 +32,103 @@ def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.4, max_s
         (-1,  1), (-1, -1),
     ]
 
-    # Compute absolute height differences for each shift
+    def neighbor_diff_no_wrap(Z, dx, dy):
+        # Slices for the overlapping region between Z and its (dx,dy) shift
+        r0 = max(0, dx)
+        r1 = Z.shape[0] + min(0, dx)
+        c0 = max(0, dy)
+        c1 = Z.shape[1] + min(0, dy)
+        base  = Z[r0:r1, c0:c1]
+        neigh = Z[r0-dx:r1-dx, c0-dy:c1-dy]
+        diff_slice = np.abs(base - neigh)
+
+        # zero out where either is NaN
+        invalid = ~np.isfinite(base) | ~np.isfinite(neigh)
+        diff_slice[invalid] = 0.0
+
+        # place into full-size canvas
+        out = np.zeros_like(Z, dtype=float)
+        out[r0:r1, c0:c1] = diff_slice
+        return out
+
+    # Collect per-neighbor diffs and gradients
     diffs = []
+    grads = []
     for dx, dy in shifts:
-        shifted = np.roll(np.roll(Z_grid, dx, axis=0), dy, axis=1)
-        diffs.append(np.abs(shifted - Z_grid))
+        d = neighbor_diff_no_wrap(Z_grid, dx, dy)
+        diffs.append(d)
+        # neighbor spacing per direction
+        if abs(dx) + abs(dy) == 1:
+            dist = radius
+        else:
+            dist = radius * np.sqrt(2.0)
+        # avoid division by zero if radius is 0
+        dist = max(dist, 1e-9)
+        grads.append(d / dist)
 
-    all_diffs = np.stack(diffs, axis=0)
+    all_diffs = np.stack(diffs, axis=0)           # [8,H,W]
+    all_grads = np.stack(grads, axis=0)           # [8,H,W]
 
-    # Mask out differences where either cell was NaN
-    nan_mask = np.isnan(Z_grid)
-    all_diffs[:, nan_mask] = 0
-
-    # Maximum neighbor difference per cell
+    # Maximum neighbor difference/gradient per cell
     max_diff = np.max(all_diffs, axis=0)
+    max_grad = np.max(all_grads, axis=0)
 
     # Step risk: normalized and capped
     step_risk = np.minimum(max_diff / max_height_diff, 1.0)
 
-    # Slope risk: arctan of gradient over diagonal distance, normalized and capped
-    slope_risk = np.minimum((np.arctan(max_diff / diag_dist) / max_slope_rad), 1.0)
+    # Slope risk: arctan of gradient normalized and capped
+    slope_risk = np.minimum(np.arctan(max_grad) / max_slope_rad, 1.0)
 
     # Restore NaNs where input was NaN
+    nan_mask = np.isnan(Z_grid)
     step_risk[nan_mask] = np.nan
     slope_risk[nan_mask] = np.nan
 
     return step_risk, slope_risk
 
 
+
 def compute_cvar_cellwise(risk_grid, alpha=0.2, radius=5.0):
     """
-    For each valid cell, collect all risk values within `radius` (in grid cells),
-    compute the α‑quantile (VaR) of that local sample, then average all local values
-    ≥ VaR to get the empirical CVaR.
+    Empirical CVaR over the *upper* alpha tail within a ball of 'radius' (in cells).
+    Handles MaskedArray and NaNs safely.
     """
-    rows, cols = risk_grid.shape
-    cvar = np.full_like(risk_grid, np.nan)
+    # normalize input to plain float ndarray with NaNs
+    if np.ma.isMaskedArray(risk_grid):
+        rg = risk_grid.filled(np.nan).astype(float, copy=False)
+    else:
+        rg = np.array(risk_grid, dtype=float, copy=False)
 
-    # 1) Build a KD‑tree of all valid‐risk cell coords
-    valid_mask = ~np.isnan(risk_grid)
+    cvar = np.full(rg.shape, np.nan, dtype=float)
+
+    valid_mask = ~np.isnan(rg)
     coords = np.column_stack(np.where(valid_mask))
-    values = risk_grid[valid_mask]
+    if coords.size == 0:
+        return cvar
+
+    values = rg[valid_mask]  # plain ndarray of valid numbers
     tree = cKDTree(coords)
 
-    # 2) For each valid cell, query its neighborhood
-    for idx, (r, c) in enumerate(coords):
-        neigh_idx = tree.query_ball_point((r, c), radius)
-        local_vals = values[neigh_idx]
+    upper_q = 1.0 - alpha
+    for (r, c) in coords:
+        idxs = tree.query_ball_point((r, c), radius)
+        local_vals = values[idxs]
         if local_vals.size == 0:
             continue
-
-        clean = np.ma.compressed(local_vals)    # gives a 1‑D ndarray of just the unmasked values
-        if clean.size == 0:
-            continue
-        var = np.quantile(clean, alpha)
-        # 4) Average the tail ≥ VaR
-        tail = local_vals[local_vals >= var]
-        cvar[r, c] = tail.mean() if tail.size else var
+        q = np.quantile(local_vals, upper_q)    # no NaNs here
+        tail = local_vals[local_vals >= q]
+        cvar[r, c] = tail.mean() if tail.size else q
 
     return cvar
 
 ### CLASS
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
-        self.client = airsim.CarClient(ip="100.123.124.47")
+        # self.client = airsim.CarClient(ip="100.123.124.103")
+        self.client = airsim.CarClient(ip="192.168.68.101")
+        # print("Connected to client")
         self.client.confirmConnection()
+        # print("Confirmed connection")
         self.vehicleName = vehicle_name
         self.lidarName = lidar_name
         self.lastlidarTimeStamp = 0
@@ -137,26 +175,32 @@ class AStarPlanner:
                  grid: np.ndarray,
                  risk_factor: float = 0.8,
                  surround_weight: float = 1.0,
-                 surround_sigma: float = 3.0):
+                 surround_sigma: float = 3.0,
+                 risk_weight: float = 6.0,
+                 risk_power: float = 2.0,
+                 prox_weight: float = 1.0):
         self.grid = grid.copy()
-        max_risk = np.nanmax(self.grid) if not np.isnan(np.nanmax(self.grid)) else 1.0
-        self.threshold = risk_factor * max_risk
+        max_risk_raw = np.nanmax(self.grid)
+        if not np.isfinite(max_risk_raw):
+            max_risk_raw = 1.0
+        self.max_risk = max_risk_raw
+        self.threshold = risk_factor * self.max_risk
         self.rows, self.cols = grid.shape
 
-        # 1) build high‑risk mask
         high_mask = (self.grid >= self.threshold) | np.isnan(self.grid)
-
-        # 2) distance from “safe” regions
         dist = distance_transform_edt(~high_mask)
-
-        # 3) fade cost: big near high-mask, decays with sigma
         self.proximity_cost = surround_weight * np.exp(-dist / surround_sigma)
 
-        # 4) final cost map: sum of raw risk + proximity penalty
-        #    (nan→very large to keep blocked cells blocked)
+        # risk shaping for fallback (route_through_array) and visualization
+        norm = np.where(np.isfinite(self.grid), self.grid / (self.max_risk + 1e-9), np.nan)
+        shaped = (norm ** risk_power) * risk_weight
         self.cost_map = np.where(np.isnan(self.grid),
                                  np.inf,
-                                 self.grid + self.proximity_cost)
+                                 shaped + prox_weight * self.proximity_cost)
+
+        self.risk_weight = risk_weight
+        self.risk_power  = risk_power
+        self.prox_weight = prox_weight
 
     def _heuristic(self, a, b):
         return np.hypot(a[0]-b[0], a[1]-b[1])
@@ -169,27 +213,23 @@ class AStarPlanner:
         return path[::-1]
 
     def plan(self, start, goal, MAX_RTSK_VALUE=50, max_expansions=20000):
-        # check validity
         for pt in (start, goal):
             r, c = pt
             if not (0 <= r < self.rows and 0 <= c < self.cols):
                 return None
-            if self.cost_map[r, c] == np.inf:
+            if not np.isfinite(self.grid[r, c]) or self.grid[r, c] >= self.threshold:
                 return None
 
-        # Compute risk threshold
-        # max_risk = np.max(self.cost_map[np.isfinite(self.cost_map
         risk_threshold = self.threshold
 
         open_set = []
         g_score = {start: 0.0}
         heapq.heappush(open_set, (self._heuristic(start, goal), start))
         came_from = {}
-        closed = set() 
+        closed = set()
 
-        # 8-connected neighbors
         neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1),
-                    (-1, -1), (-1, 1), (1, -1), (1, 1)]
+                     (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
         expansions = 0
         best_so_far = None
@@ -197,7 +237,7 @@ class AStarPlanner:
 
         while open_set:
             f, current = heapq.heappop(open_set)
-            if current in closed:   # <--- skip if already expanded
+            if current in closed:
                 continue
             closed.add(current)
 
@@ -205,7 +245,6 @@ class AStarPlanner:
                 return self._reconstruct_path(came_from, current)
 
             if expansions >= max_expansions:
-                # give a partial path toward the best node so far
                 if best_so_far is not None:
                     return self._reconstruct_path(came_from, best_so_far)
                 return None
@@ -216,12 +255,17 @@ class AStarPlanner:
                 nr, nc = current[0] + dr, current[1] + dc
                 if not (0 <= nr < self.rows and 0 <= nc < self.cols):
                     continue
-                cell_cost = self.cost_map[nr, nc]
-                if cell_cost == np.inf or cell_cost >= risk_threshold:
+
+                raw_risk = self.grid[nr, nc]
+                if not np.isfinite(raw_risk) or raw_risk >= risk_threshold:
                     continue
 
-                # small heuristic: skip tiny improvements to curb thrash
-                step_cost = cell_cost * np.hypot(dr, dc)
+                move_cost = np.hypot(dr, dc)
+                risk_norm = raw_risk / (self.max_risk + 1e-9)
+                risk_term = 1.0 + self.risk_weight * (risk_norm ** self.risk_power)
+                prox_term = 1.0 + self.prox_weight * self.proximity_cost[nr, nc]
+                step_cost = move_cost * risk_term * prox_term
+
                 tentative = cg + step_cost
                 neighbor = (nr, nc)
 
@@ -271,6 +315,7 @@ class NMPCController:
         g.append(X[:,0] - P[0:3])
 
         for k in range(self.N):
+            # inside for k in range(self.N):
             xr = P[3 + 2*k]
             yr = P[3 + 2*k + 1]
             dt_k = P[3 + 2*self.N + k]
@@ -278,24 +323,31 @@ class NMPCController:
             st = X[:,k]
             uc = U[:,k]
 
-            # tracking cost
-            # tracking cost (safe heading)
-            des_psi = ca.atan2(yr - st[1], (xr - st[0]) + 1e-8)
-            ang_err = ca.atan2(ca.sin(st[2] - des_psi), ca.cos(st[2] - des_psi))
-            err = ca.vertcat(st[0] - xr, st[1] - yr, ang_err)
-            obj += ca.mtimes([err.T, self.Q_pose, err])
+            # --- Frenet-style error (cross-track + heading) ---
+            dx = xr - st[0]
+            dy = yr - st[1]
+            des_psi = ca.atan2(dy, dx)                     # path tangent
+            # cross-track error (signed, in body frame)
+            e_ct = -ca.sin(st[2])*dx + ca.cos(st[2])*dy
+            # along-track error (optional, keep small weight)
+            e_at =  ca.cos(st[2])*dx + ca.sin(st[2])*dy
+            e_psi = ca.atan2(ca.sin(st[2] - des_psi), ca.cos(st[2] - des_psi))
+
+            # weights (tune aggressively if you’re lagging)
+            w_ct, w_at, w_psi = 8.0, 0.5, 6.0
+            obj += w_ct*e_ct**2 + w_at*e_at**2 + w_psi*e_psi**2
 
             # control effort
             obj += ca.mtimes([uc.T, self.R_u, uc]) * dt_k
 
             # smoothness
-            if k>0:
+            if k > 0:
                 du = U[:,k] - U[:,k-1]
                 obj += self.R_du * ca.sumsqr(du)
 
             # dynamics
             st_next = X[:,k+1]
-            fval    = f(st, uc)
+            fval = f(st, uc)
             g.append(st_next - (st + dt_k * fval))
 
         # terminal cost
@@ -304,7 +356,7 @@ class NMPCController:
             P[3+2*(self.N-1)+1],
             0
         )
-        Qf   = np.diag([10,10,5])
+        Qf = np.diag([15, 15, 8])   # was [10,10,5]
         obj += ca.mtimes([errT.T, Qf, errT])
 
         # build the NLP
@@ -320,6 +372,15 @@ class NMPCController:
             # CasADi wrapper
             'print_time':                  False,  # don’t print overall timing
         }
+        self._x_init = None
+        self._u_init = None
+        opts.update({
+            'ipopt.max_iter': 50,
+            'ipopt.tol': 1e-3,
+            'ipopt.acceptable_tol': 5e-3,
+            'ipopt.linear_solver': 'mumps',
+            'ipopt.warm_start_init_point': 'yes',
+        })
         self.solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
 
         # bounds (X free, U in [0,V_max]×[-δ_max,δ_max])
@@ -332,7 +393,12 @@ class NMPCController:
     def solve(self, x0, ref_traj, dt_seq):
         N = self.N
         assert len(dt_seq)==N
-
+        if self._x_init is None:
+            x_init = np.tile(x0, (N+1,1))
+            u_init = np.zeros((N,2))
+        else:
+            x_init = self._x_init
+            u_init = self._u_init
         p = np.concatenate([x0, ref_traj[:N].reshape(-1), np.array(dt_seq)])
         x_init = np.tile(x0, (N+1,1))
         u_init = np.zeros((N,2))
@@ -342,7 +408,11 @@ class NMPCController:
                           lbx=self.lbx, ubx=self.ubx,
                           lbg=self.lbg, ubg=self.ubg,
                           p=p)
-        U_opt = sol['x'][-2*N:].full().reshape(N,2)
+        flat = sol['x'].full().ravel()
+        U_opt = flat[-2*N:].reshape(N,2)
+        X_opt = flat[:3*(N+1)].reshape(N+1,3)
+        self._x_init = X_opt
+        self._u_init = U_opt
         return U_opt[0]  
 ### FUNCTIONS
 

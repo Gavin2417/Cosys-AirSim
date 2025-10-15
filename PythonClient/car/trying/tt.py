@@ -122,7 +122,7 @@ class GridMap:
     
 STEP_config ={
     # MAP
-    'grid_margin': 12,
+    'grid_margin': 8,
     'grid_resolution': 0.1,
     'radius_filter': 12,
 
@@ -151,7 +151,7 @@ STEP_config ={
     'HIGH_RISK': 0.6,
     'MAX_RTSK_VALUE': 50,
     'visualize': True,
-    'Capturing': False,
+    'Capturing': True,
     'MAX_ITER': 350,
 }
 if __name__ == "__main__":
@@ -207,7 +207,8 @@ if __name__ == "__main__":
         'total_length':[],
         'dist_to_goal': None,
         'reach_goal': False,
-        'current_pos': None
+        'current_pos': None,
+        'collision_info': []
     }
     
     distance_last = np.linalg.norm(destination_point - np.array([pos[0], pos[1]]))
@@ -393,7 +394,7 @@ if __name__ == "__main__":
                 dist_m = dist_cells * STEP_config['grid_resolution']
 
                 # parameters
-                radius_m   = float(STEP_config.get('inflation_radius', 1.2))   # halo width
+                radius_m   = float(STEP_config.get('inflation_radius', 0.8))   # halo width
                 boundary_p = float(STEP_config.get('halo_boundary_level', 0.7))  # 0..1 of MAX at boundary
                 profile    = STEP_config.get('inflation_profile', 'smoothstep')   # 'smoothstep'|'gaussian'|'poly'
 
@@ -576,10 +577,10 @@ if __name__ == "__main__":
                 ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='Smoothed A* Path')
                 ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
                 # ax.legend()
-                plt.draw(); plt.pause(0.001)
+                # plt.draw(); plt.pause(0.001)
                 last_viz_t = now_viz
                 if STEP_config['Capturing']:
-                    path = os.path.join(base, "record/combine_5", args.name)
+                    path = os.path.join(base, "record/combine_6", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -595,7 +596,8 @@ if __name__ == "__main__":
             stats_dict['count'] += 1
             if lidar_test.client.simGetCollisionInfo().has_collided:
                 stats_dict['collision_count'] += 1
-
+                ci = lidar_test.client.simGetCollisionInfo()
+                stats_dict['collision_info'].append(serialize(ci))
             distance_last = np.linalg.norm(destination_point - np.array([vehicle_x, vehicle_y]))
             # stats_dict['dist_to_goal'].append(distance_last)
             if distance_last < STEP_config['distance_to_goal']:
@@ -622,7 +624,7 @@ if __name__ == "__main__":
     
     # path to your “master” stats file
     os.chdir(base)
-    stats_file = os.path.join(base, "record/combine_stats_5.json")
+    stats_file = os.path.join(base, "record/combine_stats_6.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
@@ -638,7 +640,8 @@ if __name__ == "__main__":
         "collision_count": stats_dict["collision_count"],
         "total_length": stats_dict["total_length"],
         "dist_to_goal": stats_dict["dist_to_goal"],
-        "current_pos": stats_dict["current_pos"]
+        "current_pos": stats_dict["current_pos"],
+        "collision_info": stats_dict["collision_info"]
     })
 
     if STEP_config['Capturing']:

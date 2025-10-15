@@ -45,9 +45,9 @@ STEP_config ={
     'radius_filter': 12,
 
     # RISK
-    'max_height_diff': 0.032, 
-    'max_slope_degrees': 20.0,
-    'risk_radius': 0.5,
+    'max_height_diff': 0.25, 
+    'max_slope_degrees': 70.0,
+    'risk_radius': 0.1,
 
     'step_weight': 2.0,
     'slope_weight': 2.0,
@@ -69,7 +69,7 @@ STEP_config ={
     'HIGH_RISK': 0.6,
     'MAX_RTSK_VALUE': 50,
     'visualize': True,
-    'Capturing': False,
+    'Capturing': True,
     'MAX_ITER': 350,
 }
 if __name__ == "__main__":
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     temp_goal_idx = None     
     temp_dest_xy  = None  
     i0_prev = 0 
-    # a circular structuring element if you want Euclidean radius.
+    last_viz_t = 0.0
     struct = generate_binary_structure(2,1)
     prev_t = time.time()
     stats_dict ={
@@ -133,7 +133,8 @@ if __name__ == "__main__":
         'total_length':[],
         'dist_to_goal': None,
         'reach_goal': False,
-        'current_pos': None
+        'current_pos': None,
+        'collision_info': []
     }
     distance_last = np.linalg.norm(destination_point - np.array([pos[0], pos[1]]))
     stats_dict['dist_to_goal'] = distance_last
@@ -145,7 +146,7 @@ if __name__ == "__main__":
                 continue
             
             # Process point cloud.
-            points = np.array(point_cloud_data[:, :3], dtype=np.float64)
+            points = np.asarray(point_cloud_data[:, :3])
             points = points[np.linalg.norm(points, axis=1) > 0.6]
             pos, R = lidar_test.get_vehicle_pose()
             vehicle_x, vehicle_y = pos[0], pos[1]
@@ -221,8 +222,7 @@ if __name__ == "__main__":
             total_risk_grid = interpolate_in_radius(total_risk_grid, STEP_config['interpolate_radius'])
             masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
             risk_grid = compute_cvar_cellwise(masked_total_risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
-            risk_grid = risk_grid.filled(25)
-
+            risk_grid = np.nan_to_num(risk_grid, nan=25.0)
             # Mask cells far from the vehicle.
             distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
             if distance_from_vehicle.shape != risk_grid.shape:
@@ -332,6 +332,16 @@ if __name__ == "__main__":
             psi0 = math.atan2(R[1,0], R[0,0])
             x0   = np.array([vehicle_x, vehicle_y, psi0])
             try:
+                # estimate end-to-end latency (try 0.12–0.20s)
+                LAT = 0.15
+                n_shift = int(round(LAT / max(dt_loop, 1e-3)))
+
+                # build ref starting a bit ahead
+                i_ref0 = min(i0 + 1 + n_shift, len(smoothed_path) - 1)
+                ref_pts = smoothed_path[i_ref0 : i_ref0 + nmpc.N]
+                if len(ref_pts) < nmpc.N:
+                    ref_pts = np.vstack([ref_pts, np.tile(ref_pts[-1], (nmpc.N - len(ref_pts), 1))])
+
                 v_cmd, δ_cmd = nmpc.solve(x0, ref_pts, [dt_loop]*nmpc.N)
             except Exception:
                 v_cmd, δ_cmd = (0.0, 0.0)
@@ -356,10 +366,10 @@ if __name__ == "__main__":
             lidar_test.client.setCarControls(ctr)
 
             
-            # Visualization
-            if STEP_config['visualize']:
+            now_viz = time.time()
+            if STEP_config['visualize'] and (now_viz - last_viz_t) >= STEP_config.get('viz_dt', 0.25):
                 ax.clear()
-                c = ax.pcolormesh(Y, X, risk_grid.T, shading='auto',
+                c = ax.pcolormesh(y_edges, x_edges, risk_grid, shading='auto',
                                   cmap=cmap, alpha=0.7,
                                   vmin=0, vmax=STEP_config['MAX_RTSK_VALUE'])
                 if colorbar is None:
@@ -387,9 +397,9 @@ if __name__ == "__main__":
                 ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='Smoothed A* Path')
                 ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
                 # ax.legend()
-                plt.draw(); plt.pause(0.1)
+                # plt.draw(); plt.pause(0.1)
                 if STEP_config['Capturing']:
-                    path = os.path.join(BASE_DIR, "record/step_2", args.name)
+                    path = os.path.join(BASE_DIR, "record/step_6", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -405,7 +415,8 @@ if __name__ == "__main__":
             stats_dict['count'] += 1
             if lidar_test.client.simGetCollisionInfo().has_collided:
                 stats_dict['collision_count'] += 1
-
+                ci = lidar_test.client.simGetCollisionInfo()
+                stats_dict['collision_info'].append(serialize(ci)) 
             distance_last = np.linalg.norm(destination_point - np.array([vehicle_x, vehicle_y]))
             # stats_dict['dist_to_goal'].append(distance_last)
             if distance_last < STEP_config['distance_to_goal']:
@@ -431,7 +442,7 @@ if __name__ == "__main__":
 
     
     # path to your “master” stats file
-    stats_file = os.path.join(BASE_DIR, "record/step_stats_2.json")
+    stats_file = os.path.join(BASE_DIR, "record/step_stats_6.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
@@ -447,7 +458,8 @@ if __name__ == "__main__":
         "collision_count": stats_dict["collision_count"],
         "total_length": stats_dict["total_length"],
         "dist_to_goal": stats_dict["dist_to_goal"],
-        "current_pos": stats_dict["current_pos"]
+        "current_pos": stats_dict["current_pos"],
+        "collision_info": stats_dict["collision_info"]
     })
     if STEP_config['Capturing']:
         with open(stats_file, "w") as f:

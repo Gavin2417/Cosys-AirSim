@@ -6,7 +6,7 @@ from utils.config import Config10labels as cfg
 from utils.data_process import DataProcessing as DP
 import open3d as o3d
 class RandlaGroundSegmentor:
-    def __init__(self, ckpt_path='log/checkpoint_slope_edge.tar', device=None, subsample_grid=0.1):
+    def __init__(self, ckpt_path='log/checkpoint_slope_only.tar', device=None, subsample_grid=0.1):
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = Network(cfg).to(self.device)
         ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=True)
@@ -22,9 +22,10 @@ class RandlaGroundSegmentor:
     def segment(self, points_world):
         """
         points_world: (M,3) np.array of live LiDAR points
-        returns: labels_world (M,) ints 1=ground, 0=non-ground
+        returns:
+          - if return_probs is False: labels_world (M,) ints
+          - if return_probs is True: (labels_world (M,), probs_world (M,C)) with per‑class probabilities
         """
-
         # --- 1) statistical outlier removal ---
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points_world)
@@ -89,25 +90,25 @@ class RandlaGroundSegmentor:
                 "interp_idx": interp_idx
             }
             end_pts = self.model(inputs)
-            # end_pts["logits"]: [1, C, N]
-            preds = end_pts["logits"].argmax(dim=1).squeeze(0).cpu().numpy()
+            # logits: [1, C, N]
+            logits = end_pts["logits"]
+            preds = logits.argmax(dim=1).squeeze(0).cpu().numpy()  # [N]
+            # probs_sampled: [N, C]
+            probs_sampled = torch.softmax(logits, dim=1).squeeze(0).permute(1, 0).contiguous().cpu().numpy()
 
         # --- 6) project back to original M points ---
         tree = KDTree(sampled)
-        nn = tree.query(points_world, return_distance=False).squeeze(-1)
+        nn = tree.query(points_world, return_distance=False).squeeze(-1)  # [M]
         labels_world = preds[nn]
-        # print(labels_world)
-        # If your network is binary (0=non-ground, 1=ground) you’re done.
-        # Otherwise, map semantic classes  binary here:
-        # ground_classes = {your_ground_class_indices}
-        # labels_world = np.isin(labels_world, list(ground_classes)).astype(np.int32)
 
-        return labels_world
+        probs_world = probs_sampled[nn]  # [M, C]
+        return labels_world, probs_world
+
 # import numpy as np
 # import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3D
 # import open3d as o3d
-
+# from matplotlib.colors import LinearSegmentedColormap, BoundaryNorm
 # # 1) instantiate model ONCE
 # seg = RandlaGroundSegmentor()
 
@@ -120,24 +121,48 @@ class RandlaGroundSegmentor:
 #     point_path = f"../data/4/{i}.ply"
 #     pcd = o3d.io.read_point_cloud(point_path)
 #     points_np = np.asarray(pcd.points, dtype= np.float32)
-#     print(f"Frame {i}, points: {len(points_np):,}")
+    
 
 #     # 3) segment once per frame
-#     labels = seg.segment(points_np)
-#     print("Unique labels:", np.unique(labels))
+#     labels, probs = seg.segment(points_np)
+#     # print(np.unique(probs))
+#     # print("Unique labels:", np.unique(labels))
+#     # assert len(labels) == len(points_np)
+#     # print(f"Frame {i}, points: {len(points_np):,}, labels: {len(labels):,}")
+#     # print("len of probs: ", len(probs))
+#     # print("probs: ", probs[0])
+#     # print("probs shape: ", probs[0].shape)
+#     # print("max of probs: ", np.max(probs[0]))
+#     # print("maxz pos of probs: ", np.argmax(probs[0]))
+#     # print("labels: ", labels[0])
+#     for i in range(len(probs)):
+#         # print("probs: ", probs[i])
+#         print("max of probs: ", np.max(probs[i]))
+#         # print("maxz pos of probs: ", np.argmax(probs[i]))
+#         # print("labels: ", labels[i])
+      
 
-#     # 4) color array
-#     colors = np.zeros_like(points_np)
-#     colors[labels == 0] = [0, 1, 0]
-#     colors[labels == 1] = [1, 0, 0]
+#     num_classes = 51
+#     labels_i = np.clip(labels.astype(int), 0, num_classes - 1)
+
+#     colors_list = [
+#             (0.5, 0.5, 0.5),  # gray
+#             (1.0, 1.0, 0.0),  # yellow
+#             (1.0, 0.5, 0.0),  # orange
+#             (1.0, 0.0, 0.0),  # red
+#             (0.0, 0.0, 0.0),  # black
+#     ]
+#     cmap = LinearSegmentedColormap.from_list(
+#         "gray_yellow_orange_red_black", colors_list, N=num_classes
+#     )
+#     norm = BoundaryNorm(np.arange(num_classes + 1) - 0.5, cmap.N)
 
 #     # 5) clear the old scatter and draw new one
 #     ax.clear()
 #     ax.scatter(
 #         points_np[:,0], points_np[:,1], points_np[:,2],
-#         c=colors,
-#         s=0.5,
-#         depthshade=False
+#         c=labels_i, cmap=cmap, norm=norm,
+#         s=0.5, depthshade=False
 #     )
 #     ax.set_xlabel('X')
 #     ax.set_ylabel('Y')
@@ -147,7 +172,7 @@ class RandlaGroundSegmentor:
 #     # 6) redraw & pause briefly
 #     plt.draw()
 #     plt.pause(0.1)
-
+#     break
 # # finish
 # plt.ioff()
 # plt.show()
