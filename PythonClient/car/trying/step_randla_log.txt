@@ -1,0 +1,2045 @@
+=== STEP & RANDLA Test Log ===
+Started at: 2025-10-15 00:23:41.298330
+
+
+=== Run 1 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_1] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  150
+collision_count:  26
+dist_to_goal:  13.12678868509194
+total_length:  28.939268762814052
+current_pos:  [np.float64(-21.228391647338867), np.float64(16.439010620117188)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 2 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_2] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  223
+dist_to_goal:  13.12411817826261
+total_length:  25.1791753639648
+current_pos:  [np.float64(-20.272960662841797), np.float64(9.486525535583496)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 3 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_3] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  152
+collision_count:  6
+dist_to_goal:  13.124402132496703
+total_length:  25.635167449553144
+current_pos:  [np.float64(-20.887325286865234), np.float64(16.247522354125977)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 4 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_4] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  286
+dist_to_goal:  13.124397336661612
+total_length:  11.926238225922297
+current_pos:  [np.float64(-24.72026252746582), np.float64(6.405829429626465)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 5 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_5] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  227
+collision_count:  25
+dist_to_goal:  13.124262690968019
+total_length:  35.7741883622306
+current_pos:  [np.float64(-20.877981185913086), np.float64(16.217103958129883)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 6 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_6] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  108
+collision_count:  12
+dist_to_goal:  13.12439980724266
+total_length:  24.131858054672435
+current_pos:  [np.float64(-21.12342071533203), np.float64(16.56793212890625)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 7 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_7] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  205
+collision_count:  31
+dist_to_goal:  13.124402277824352
+total_length:  32.129826787679626
+current_pos:  [np.float64(-21.070375442504883), np.float64(16.60350227355957)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 8 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_8] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  184
+collision_count:  10
+dist_to_goal:  13.12439980724266
+total_length:  35.77174774659551
+current_pos:  [np.float64(-20.514049530029297), np.float64(16.867759704589844)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 9 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_9] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  107
+collision_count:  0
+dist_to_goal:  13.124398571952057
+total_length:  27.630194787248442
+current_pos:  [np.float64(-21.592580795288086), np.float64(16.00545310974121)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 10 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_10] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  145
+collision_count:  7
+dist_to_goal:  13.124397336661612
+total_length:  32.23940295355032
+current_pos:  [np.float64(-20.62625503540039), np.float64(16.69683837890625)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 11 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_11] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  143
+collision_count:  16
+dist_to_goal:  13.124398571952057
+total_length:  25.39437984651072
+current_pos:  [np.float64(-21.62495994567871), np.float64(16.40599250793457)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 12 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_12] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  160
+collision_count:  5
+dist_to_goal:  13.124397336661612
+total_length:  31.762033805107023
+current_pos:  [np.float64(-21.569046020507812), np.float64(16.42140769958496)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 13 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_13] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  88
+collision_count:  11
+dist_to_goal:  13.124398571952057
+total_length:  22.364483357630444
+current_pos:  [np.float64(-21.16515350341797), np.float64(16.362939834594727)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 14 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_14] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  95
+collision_count:  7
+dist_to_goal:  13.124397336661612
+total_length:  26.456867739609404
+current_pos:  [np.float64(-21.831432342529297), np.float64(16.131406784057617)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 15 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_15] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  280
+dist_to_goal:  13.124397336661612
+total_length:  20.038940311350242
+current_pos:  [np.float64(-20.296180725097656), np.float64(9.495899200439453)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 16 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_16] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  160
+collision_count:  42
+dist_to_goal:  13.124401187869099
+total_length:  23.48762117400856
+current_pos:  [np.float64(-21.67595100402832), np.float64(16.7865047454834)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 17 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_17] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  152
+collision_count:  15
+dist_to_goal:  13.124398571952057
+total_length:  35.587576475828314
+current_pos:  [np.float64(-21.640483856201172), np.float64(16.193889617919922)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 18 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_18] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  138
+collision_count:  41
+dist_to_goal:  13.124398571952057
+total_length:  25.27934119375984
+current_pos:  [np.float64(-20.922988891601562), np.float64(17.557424545288086)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 19 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_19] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  126
+collision_count:  16
+dist_to_goal:  13.124397336661612
+total_length:  25.389479289830152
+current_pos:  [np.float64(-21.37959098815918), np.float64(16.197978973388672)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 20 | [normal] Start: (-30, 7) -> Goal: (-21.5, 17) | dz=0.0 ===
+
+===== [normal_20] Goal: (-21.5, 17) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  150
+collision_count:  9
+dist_to_goal:  13.125885019674612
+total_length:  30.75665714355125
+current_pos:  [np.float64(-21.611780166625977), np.float64(16.571353912353516)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 1 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_1] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  137
+collision_count:  0
+dist_to_goal:  16.362854254079497
+total_length:  32.20660463567458
+current_pos:  [np.float64(-21.00498390197754), np.float64(-6.707609176635742)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 2 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_2] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  164
+collision_count:  0
+dist_to_goal:  16.290077119545327
+total_length:  34.76129606999548
+current_pos:  [np.float64(-20.53347396850586), np.float64(-6.06553316116333)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 3 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_3] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  214
+collision_count:  0
+dist_to_goal:  16.362486116880707
+total_length:  34.843477722936
+current_pos:  [np.float64(-20.777456283569336), np.float64(-6.052217483520508)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 4 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_4] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  173
+collision_count:  0
+dist_to_goal:  16.292963264229112
+total_length:  34.2298719537374
+current_pos:  [np.float64(-20.682693481445312), np.float64(-6.330835819244385)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 5 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_5] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  160
+collision_count:  0
+dist_to_goal:  16.31909779714993
+total_length:  33.33642557174255
+current_pos:  [np.float64(-20.86450958251953), np.float64(-5.859267711639404)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 6 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_6] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  171
+collision_count:  0
+dist_to_goal:  16.36422135235673
+total_length:  30.70130271437643
+current_pos:  [np.float64(-21.226755142211914), np.float64(-6.204525947570801)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 7 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_7] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  236
+collision_count:  0
+dist_to_goal:  16.36326648137475
+total_length:  43.35695511183026
+current_pos:  [np.float64(-20.80632781982422), np.float64(-6.605707168579102)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 8 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_8] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  195
+collision_count:  0
+dist_to_goal:  16.2872138534214
+total_length:  35.69755380823717
+current_pos:  [np.float64(-21.582571029663086), np.float64(-6.65848970413208)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 9 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_9] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  140
+collision_count:  1
+dist_to_goal:  16.36260671275131
+total_length:  34.6858482621513
+current_pos:  [np.float64(-20.748979568481445), np.float64(-6.288175582885742)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 10 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_10] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  225
+collision_count:  4
+dist_to_goal:  16.36342585369779
+total_length:  37.454034907066145
+current_pos:  [np.float64(-21.55554962158203), np.float64(-6.329488277435303)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 11 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_11] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  171
+collision_count:  2
+dist_to_goal:  16.36322338418456
+total_length:  38.829073332430006
+current_pos:  [np.float64(-20.832487106323242), np.float64(-6.574106693267822)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 12 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_12] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  16.29022588689783
+total_length:  18.810913254258825
+current_pos:  [np.float64(-19.15631866455078), np.float64(-15.459510803222656)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 13 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_13] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  211
+dist_to_goal:  16.286203783121127
+total_length:  27.491297470931507
+current_pos:  [np.float64(-15.87462043762207), np.float64(-8.895316123962402)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 14 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_14] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  189
+collision_count:  2
+dist_to_goal:  16.362841353095366
+total_length:  35.59189643041489
+current_pos:  [np.float64(-21.3214168548584), np.float64(-6.712446689605713)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 15 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_15] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  154
+collision_count:  0
+dist_to_goal:  16.362931326018355
+total_length:  33.04805697829762
+current_pos:  [np.float64(-21.348093032836914), np.float64(-6.498985767364502)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 16 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_16] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  179
+collision_count:  0
+dist_to_goal:  16.363172018034362
+total_length:  38.79494185423549
+current_pos:  [np.float64(-20.821279525756836), np.float64(-6.303529739379883)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 17 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_17] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  146
+collision_count:  0
+dist_to_goal:  16.294104102421162
+total_length:  34.13953984021132
+current_pos:  [np.float64(-21.008893966674805), np.float64(-6.501691818237305)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 18 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_18] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  142
+collision_count:  0
+dist_to_goal:  16.292695943549354
+total_length:  32.04817373993691
+current_pos:  [np.float64(-20.52745246887207), np.float64(-6.174860954284668)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 19 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_19] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  151
+collision_count:  0
+dist_to_goal:  16.362860091456316
+total_length:  35.96404417935699
+current_pos:  [np.float64(-21.231693267822266), np.float64(-6.350296497344971)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 20 | [uneven] Start: (-30, -20) -> Goal: (-21.5, -6) | dz=-0.5 ===
+
+===== [uneven_20] Goal: (-21.5, -6) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  173
+collision_count:  1
+dist_to_goal:  16.363215382879382
+total_length:  37.31460512279029
+current_pos:  [np.float64(-21.627527236938477), np.float64(-6.244513511657715)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 1 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_1] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  158
+dist_to_goal:  13.0383983737796
+total_length:  41.38333025567858
+current_pos:  [np.float64(-8.751371383666992), np.float64(-40.44446563720703)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 2 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_2] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  5
+dist_to_goal:  13.040353094474531
+total_length:  75.8176891229742
+current_pos:  [np.float64(-14.732818603515625), np.float64(-38.37860870361328)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 3 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_3] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  8
+dist_to_goal:  13.038203666460468
+total_length:  72.59012011273919
+current_pos:  [np.float64(-18.926414489746094), np.float64(-44.286903381347656)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 4 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_4] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  1
+dist_to_goal:  13.038203666460468
+total_length:  59.01389033087768
+current_pos:  [np.float64(-8.158347129821777), np.float64(-44.551815032958984)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 5 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_5] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  286
+collision_count:  10
+dist_to_goal:  13.038329489423091
+total_length:  74.91595997451122
+current_pos:  [np.float64(-19.390111923217773), np.float64(-37.420597076416016)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 6 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_6] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  16
+dist_to_goal:  13.038399982935903
+total_length:  68.57594668587194
+current_pos:  [np.float64(-20.981853485107422), np.float64(-44.741615295410156)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 7 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_7] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  13.038401592092288
+total_length:  59.879750772368
+current_pos:  [np.float64(-10.293209075927734), np.float64(-43.24159622192383)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 8 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_8] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  2
+dist_to_goal:  13.038420170628434
+total_length:  76.24937537488876
+current_pos:  [np.float64(-7.210683822631836), np.float64(-43.69620895385742)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 9 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_9] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  13
+dist_to_goal:  13.038399982935903
+total_length:  94.15167280649457
+current_pos:  [np.float64(-5.07869291305542), np.float64(-42.73264694213867)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 10 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_10] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  13.038401592092288
+total_length:  61.59364201653021
+current_pos:  [np.float64(-7.0146613121032715), np.float64(-44.2883415222168)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 11 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_11] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  1
+dist_to_goal:  13.038206884753693
+total_length:  59.42270684141451
+current_pos:  [np.float64(-12.571271896362305), np.float64(-42.50181579589844)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 12 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_12] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  3
+dist_to_goal:  13.038198839021234
+total_length:  66.10747714161444
+current_pos:  [np.float64(-9.872529983520508), np.float64(-44.95124816894531)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 13 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_13] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  7
+dist_to_goal:  13.038421779781212
+total_length:  58.99201041378358
+current_pos:  [np.float64(-15.517829895019531), np.float64(-35.95751190185547)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 14 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_14] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  4
+dist_to_goal:  13.0384222186584
+total_length:  60.32732394871588
+current_pos:  [np.float64(-8.293590545654297), np.float64(-42.990779876708984)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 15 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_15] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  1
+dist_to_goal:  13.042306636158049
+total_length:  63.894438223273305
+current_pos:  [np.float64(-8.796463012695312), np.float64(-44.459022521972656)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 16 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_16] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  1
+dist_to_goal:  13.0384222186584
+total_length:  60.36504671994534
+current_pos:  [np.float64(-7.81724214553833), np.float64(-43.65044403076172)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 17 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_17] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  13.038213321341107
+total_length:  68.73863104182914
+current_pos:  [np.float64(-7.31997013092041), np.float64(-43.533355712890625)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 18 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_18] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  271
+collision_count:  10
+dist_to_goal:  13.038395155467233
+total_length:  67.89557319513642
+current_pos:  [np.float64(-19.3829288482666), np.float64(-37.331111907958984)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 19 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_19] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  5
+dist_to_goal:  13.038211712194133
+total_length:  61.71637143879204
+current_pos:  [np.float64(-6.040470600128174), np.float64(-43.213844299316406)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 20 | [ramp] Start: (-31, -44) -> Goal: (-20, -37) | dz=0.0 ===
+
+===== [ramp_20] Goal: (-20, -37) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  232
+collision_count:  0
+dist_to_goal:  13.039234629445474
+total_length:  66.3004616010875
+current_pos:  [np.float64(-19.225872039794922), np.float64(-36.48734664916992)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 1 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_1] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  13.99978256225586
+total_length:  76.42753277587049
+current_pos:  [np.float64(-49.059600830078125), np.float64(5.004755020141602)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 2 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_2] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  14.005538940629771
+total_length:  82.75187728762623
+current_pos:  [np.float64(-50.418914794921875), np.float64(7.093393325805664)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 3 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_3] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  14.006065936894654
+total_length:  67.09314596008508
+current_pos:  [np.float64(-52.620643615722656), np.float64(3.8003828525543213)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 4 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_4] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  13.999786376953125
+total_length:  71.79427475208638
+current_pos:  [np.float64(-48.664981842041016), np.float64(7.665077209472656)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 5 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_5] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  137
+collision_count:  16
+dist_to_goal:  14.008727853510553
+total_length:  43.91019041647841
+current_pos:  [np.float64(-40.96333694458008), np.float64(5.624334812164307)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 6 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_6] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  167
+collision_count:  1
+dist_to_goal:  13.999988555908203
+total_length:  38.8637520627134
+current_pos:  [np.float64(-40.130863189697266), np.float64(5.25550651550293)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 7 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_7] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  14.002098083709177
+total_length:  88.11317149294553
+current_pos:  [np.float64(-49.711544036865234), np.float64(6.234882831573486)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 8 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_8] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  14.007549569081313
+total_length:  86.72307824623678
+current_pos:  [np.float64(-49.09144592285156), np.float64(5.570286273956299)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 9 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_9] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  284
+collision_count:  4
+dist_to_goal:  14.00908663396733
+total_length:  82.26230517689595
+current_pos:  [np.float64(-40.363582611083984), np.float64(5.511794567108154)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 10 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_10] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  1
+dist_to_goal:  13.999992370605469
+total_length:  83.22402147005988
+current_pos:  [np.float64(-52.987606048583984), np.float64(4.094881057739258)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 11 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_11] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  13.99998474131647
+total_length:  82.54231746821822
+current_pos:  [np.float64(-50.117027282714844), np.float64(12.343153953552246)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 12 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_12] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  245
+collision_count:  6
+dist_to_goal:  14.002529144794549
+total_length:  49.28134571544136
+current_pos:  [np.float64(-41.292301177978516), np.float64(5.176498889923096)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 13 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_13] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  13.999992370605469
+total_length:  56.50052230950459
+current_pos:  [np.float64(-49.65840530395508), np.float64(9.017313003540039)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 14 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_14] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  284
+collision_count:  2
+dist_to_goal:  13.999984741325932
+total_length:  80.16945979166968
+current_pos:  [np.float64(-40.383583068847656), np.float64(5.595947265625)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 15 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_15] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  14.000278484710886
+total_length:  73.43263885194017
+current_pos:  [np.float64(-49.110198974609375), np.float64(5.197505950927734)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 16 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_16] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  16
+dist_to_goal:  14.009735127246191
+total_length:  79.3086540187391
+current_pos:  [np.float64(-42.97768020629883), np.float64(5.097166538238525)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 17 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_17] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  1
+dist_to_goal:  13.999988555908333
+total_length:  101.72964102178763
+current_pos:  [np.float64(-53.80580520629883), np.float64(6.83577299118042)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 18 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_18] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  198
+collision_count:  1
+dist_to_goal:  13.999774932861328
+total_length:  39.769667164766965
+current_pos:  [np.float64(-41.90774154663086), np.float64(5.393275260925293)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 19 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_19] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  174
+collision_count:  2
+dist_to_goal:  13.999988555908203
+total_length:  43.64878157782958
+current_pos:  [np.float64(-40.751075744628906), np.float64(5.954832077026367)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 20 | [two_height_ramp] Start: (-55, 5) -> Goal: (-41, 5) | dz=0.0 ===
+
+===== [two_height_ramp_20] Goal: (-41, 5) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  14.002086639661549
+total_length:  77.39586085772362
+current_pos:  [np.float64(-47.547245025634766), np.float64(4.285437107086182)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 1 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_1] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  309
+dist_to_goal:  13.01089477637709
+total_length:  10.218587794354583
+current_pos:  [np.float64(-26.745433807373047), np.float64(35.10196304321289)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 2 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_2] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  115
+collision_count:  1
+dist_to_goal:  12.999767303466797
+total_length:  18.361828797871976
+current_pos:  [np.float64(-20.57295036315918), np.float64(40.60377502441406)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 3 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_3] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  272
+dist_to_goal:  12.999767303466797
+total_length:  10.688921860576295
+current_pos:  [np.float64(-26.548583984375), np.float64(35.52383041381836)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 4 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_4] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  70
+collision_count:  1
+dist_to_goal:  12.999992370606028
+total_length:  18.08733663411424
+current_pos:  [np.float64(-20.416086196899414), np.float64(40.136199951171875)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 5 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_5] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  57
+dist_to_goal:  12.999996185302734
+total_length:  94.3711543665084
+current_pos:  [np.float64(-29.204029083251953), np.float64(37.49729537963867)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 6 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_6] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  107
+collision_count:  1
+dist_to_goal:  12.99985122682679
+total_length:  21.171004979289577
+current_pos:  [np.float64(-20.367130279541016), np.float64(39.80487060546875)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 7 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_7] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  111
+collision_count:  5
+dist_to_goal:  12.999988556017902
+total_length:  22.065217170167738
+current_pos:  [np.float64(-20.660308837890625), np.float64(39.49265670776367)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 8 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_8] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  140
+collision_count:  11
+dist_to_goal:  12.999992370605469
+total_length:  22.549266067410883
+current_pos:  [np.float64(-20.887374877929688), np.float64(40.27277374267578)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 9 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_9] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  87
+collision_count:  0
+dist_to_goal:  12.999988555908203
+total_length:  22.222350116455292
+current_pos:  [np.float64(-19.70644760131836), np.float64(40.59027862548828)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 10 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_10] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  171
+collision_count:  11
+dist_to_goal:  12.999996185302734
+total_length:  25.205917483946763
+current_pos:  [np.float64(-20.497865676879883), np.float64(39.871402740478516)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 11 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_11] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  314
+dist_to_goal:  12.999992370605469
+total_length:  10.967169115600612
+current_pos:  [np.float64(-25.673015594482422), np.float64(35.16328430175781)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 12 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_12] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  78
+collision_count:  12
+dist_to_goal:  12.999774932861328
+total_length:  17.79806046327743
+current_pos:  [np.float64(-20.672771453857422), np.float64(39.84148025512695)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 13 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_13] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  67
+collision_count:  0
+dist_to_goal:  12.999992370605469
+total_length:  16.84759514621815
+current_pos:  [np.float64(-20.938873291015625), np.float64(39.913330078125)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 14 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_14] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  68
+collision_count:  3
+dist_to_goal:  12.999996185302734
+total_length:  17.510749291602835
+current_pos:  [np.float64(-20.885414123535156), np.float64(40.438079833984375)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 15 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_15] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  300
+dist_to_goal:  12.999996185302734
+total_length:  12.006567950663129
+current_pos:  [np.float64(-26.84429168701172), np.float64(35.13717269897461)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 16 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_16] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  16
+dist_to_goal:  13.000324265252459
+total_length:  111.9919473796453
+current_pos:  [np.float64(-15.180363655090332), np.float64(31.02784538269043)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 17 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_17] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  150
+collision_count:  1
+dist_to_goal:  12.999992370605469
+total_length:  23.67918516103908
+current_pos:  [np.float64(-20.47425079345703), np.float64(39.40991973876953)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 18 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_18] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  112
+collision_count:  2
+dist_to_goal:  13.002143860065296
+total_length:  22.15861545503934
+current_pos:  [np.float64(-20.07373046875), np.float64(40.10432434082031)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 19 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_19] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  76
+collision_count:  0
+dist_to_goal:  12.999996185302734
+total_length:  18.25557840160489
+current_pos:  [np.float64(-20.351110458374023), np.float64(40.19165802001953)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 20 | [ramp_obstacle] Start: (-33, 40) -> Goal: (-20, 40) | dz=0.0 ===
+
+===== [ramp_obstacle_20] Goal: (-20, 40) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  113
+collision_count:  25
+dist_to_goal:  12.999763488769531
+total_length:  21.236978018217226
+current_pos:  [np.float64(-20.54444694519043), np.float64(40.2264289855957)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 1 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_1] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  14.055488588197342
+total_length:  12.176192686349772
+current_pos:  [np.float64(-47.98564147949219), np.float64(-12.150602340698242)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 2 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_2] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  319
+dist_to_goal:  14.064159400513994
+total_length:  7.79398871284067
+current_pos:  [np.float64(-47.83869552612305), np.float64(-12.24224853515625)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 3 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_3] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  3
+dist_to_goal:  14.055591630699016
+total_length:  21.68800310968472
+current_pos:  [np.float64(-49.90855026245117), np.float64(-12.739583969116211)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 4 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_4] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  261
+dist_to_goal:  14.058208472391167
+total_length:  16.27888800005438
+current_pos:  [np.float64(-49.957706451416016), np.float64(-12.84382438659668)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 5 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_5] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  3
+dist_to_goal:  14.055278785499553
+total_length:  9.408956090564063
+current_pos:  [np.float64(-48.962791442871094), np.float64(-12.405277252197266)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 6 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_6] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  101
+collision_count:  0
+dist_to_goal:  14.060752868733198
+total_length:  25.19949366882176
+current_pos:  [np.float64(-41.08547592163086), np.float64(-13.371347427368164)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 7 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_7] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  314
+dist_to_goal:  14.060966511730303
+total_length:  9.219522418625864
+current_pos:  [np.float64(-49.25493621826172), np.float64(-12.449813842773438)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 8 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_8] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  2
+dist_to_goal:  14.057872842689882
+total_length:  10.029381751685756
+current_pos:  [np.float64(-48.05853271484375), np.float64(-12.250927925109863)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 9 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_9] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  320
+dist_to_goal:  14.055442818179436
+total_length:  9.560855021397083
+current_pos:  [np.float64(-48.23349380493164), np.float64(-12.467781066894531)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 10 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_10] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  229
+dist_to_goal:  14.05777747326764
+total_length:  20.06341183295993
+current_pos:  [np.float64(-48.50685501098633), np.float64(-12.343186378479004)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 11 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_11] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  2
+dist_to_goal:  14.057441777761879
+total_length:  9.756108908785533
+current_pos:  [np.float64(-49.30839538574219), np.float64(-12.413033485412598)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 12 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_12] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  1
+dist_to_goal:  14.059311002323028
+total_length:  16.587408486740664
+current_pos:  [np.float64(-50.00273513793945), np.float64(-12.680828094482422)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 13 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_13] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  334
+dist_to_goal:  14.057716389920014
+total_length:  7.154526293260791
+current_pos:  [np.float64(-47.999732971191406), np.float64(-12.345637321472168)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 14 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_14] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  13
+dist_to_goal:  14.058757830442717
+total_length:  15.268915809426858
+current_pos:  [np.float64(-49.87994384765625), np.float64(-12.625823020935059)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 15 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_15] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  0
+dist_to_goal:  14.060134964300456
+total_length:  23.447816555338814
+current_pos:  [np.float64(-49.861297607421875), np.float64(-12.73454475402832)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 16 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_16] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  341
+dist_to_goal:  14.055858612089665
+total_length:  7.270038343789273
+current_pos:  [np.float64(-48.05490493774414), np.float64(-12.14831829071045)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 17 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_17] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  2
+dist_to_goal:  14.057514252279375
+total_length:  18.87408613305732
+current_pos:  [np.float64(-49.90857696533203), np.float64(-12.739569664001465)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 18 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_18] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  323
+dist_to_goal:  14.055828095950242
+total_length:  9.401527227098018
+current_pos:  [np.float64(-47.94205093383789), np.float64(-12.238605499267578)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 19 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_19] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  265
+dist_to_goal:  14.05749135894076
+total_length:  17.302195292977988
+current_pos:  [np.float64(-48.41231918334961), np.float64(-12.32359504699707)]
+--------------Done--------------
+Saved stats for this run
+
+=== Run 20 | [hole] Start: (-55.2, -13) -> Goal: (-41, -13) | dz=-4.5 ===
+
+===== [hole_20] Goal: (-41, -13) | Script: tt.py =====
+/mnt/c/Users/gavin/OneDrive/Documents/GitHub/Cosys-AirSim/PythonClient/car/trying
+Connected!
+Cosys-AirSim server is of older version and not supported by this client. Please upgrade!
+
+-----------------------------------------------
+Reached Destination
+Count:  350
+collision_count:  334
+dist_to_goal:  14.053051041781654
+total_length:  5.615525750493413
+current_pos:  [np.float64(-49.73316192626953), np.float64(-12.661194801330566)]
+--------------Done--------------
+Saved stats for this run
+
+All runs complete at 2025-10-15 07:27:08.079009
