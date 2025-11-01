@@ -421,3 +421,4 @@ docker/LinuxBlocks/*
 /Unreal/Environments/Blocks
 /PythonClient/car/trying/record/*
 !/PythonClient/car/trying/record/*.json
+!/PythonClient/car/trying/record/*.ipynb

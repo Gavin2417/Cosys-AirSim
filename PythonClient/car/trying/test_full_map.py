@@ -81,39 +81,34 @@ def step_risk_confidence(Z_mean_grid, N_count_grid, grid_resolution,
     return conf
 class GridMap:
     def __init__(self, resolution):
-        self.resolution = resolution
-        # Store (z_sum, sem_risk_sum, sem_conf_sum, count) per cell
+        self.resolution = float(resolution)
         self.grid = {}
 
     def get_grid_cell(self, x, y):
-        return (round(x / self.resolution, 1), round(y / self.resolution, 1))
+        ix = int(np.floor(x / self.resolution))
+        iy = int(np.floor(y / self.resolution))
+        return (ix, iy)
+
     def add_point(self, x, y, z, sem_risk, sem_conf):
         cell = self.get_grid_cell(x, y)
         if cell not in self.grid:
             self.grid[cell] = [float(z), float(sem_risk), float(sem_conf), 1]
         else:
             g = self.grid[cell]
-            g[0] += float(z)
-            g[1] += float(sem_risk)
-            g[2] += float(sem_conf)
-            g[3] += 1
+            g[0] += float(z); g[1] += float(sem_risk); g[2] += float(sem_conf); g[3] += 1
 
     def get_estimates(self):
-        height_estimates = []
-        semrisk_estimates = []
-        semconf_estimates = []
-        count_estimates = []
-        for (gx, gy), (z_sum, risk_sum, conf_sum, n) in self.grid.items():
-            cx = (gx) * self.resolution
-            cy = (gy  ) * self.resolution
-            height_estimates.append([cx, cy, z_sum / n *1.0])
-            semrisk_estimates.append([cx, cy, risk_sum / n*1.0])
-            semconf_estimates.append([cx, cy, conf_sum / n*1.0])
-            count_estimates.append([cx, cy, n])
-        return (np.array(height_estimates),
-                np.array(semrisk_estimates),
-                np.array(semconf_estimates),
-                np.array(count_estimates))
+        h, r, c, n = [], [], [], []
+        for (ix, iy), (zsum, rsum, csum, cnt) in self.grid.items():
+            cx = (ix + 0.5) * self.resolution
+            cy = (iy + 0.5) * self.resolution
+            inv = 1.0 / cnt
+            h.append([cx, cy, zsum*inv])
+            r.append([cx, cy, rsum*inv])
+            c.append([cx, cy, csum*inv])
+            n.append([cx, cy, cnt])
+        return np.array(h), np.array(r), np.array(c), np.array(n)
+
 
     def prune_far(self, cx, cy, max_radius_cells):
         to_del = []
@@ -127,7 +122,7 @@ class GridMap:
     
 STEP_config ={
     # MAP
-    'grid_margin': 6,
+    'grid_margin': 8,
     'grid_resolution': 0.1,
     'radius_filter': 12,
 
@@ -141,7 +136,7 @@ STEP_config ={
     'z_norm_weight': 2.0,
     'interpolate_radius': 1.5,
     'cvar_a': 0.5,
-    'cvar_radius': 2.0,
+    'cvar_radius': 4.0,
     'distance_ignored': 9.0,
 
     # a star
@@ -158,7 +153,6 @@ STEP_config ={
     'visualize': True,
     'Capturing': True,
     'MAX_ITER': 350,
-    'viz_dt': 0.25,
 }
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -204,7 +198,6 @@ if __name__ == "__main__":
     temp_goal_idx = None     
     temp_dest_xy  = None  
     i0_prev = 0 
-    # a circular structuring element if you want Euclidean radius.
     last_viz_t = 0.0
     struct = generate_binary_structure(2,1)
     prev_t = time.time()
@@ -214,8 +207,10 @@ if __name__ == "__main__":
         'total_length':[],
         'dist_to_goal': None,
         'reach_goal': False,
-        'current_pos': None
+        'current_pos': None,
+        'collision_info': []
     }
+    
     distance_last = np.linalg.norm(destination_point - np.array([pos[0], pos[1]]))
     stats_dict['dist_to_goal'] = distance_last
     last_pos = start_point.copy()
@@ -269,15 +264,15 @@ if __name__ == "__main__":
             veh_gx = int(np.floor(vehicle_x / STEP_config['grid_resolution']))
             veh_gy = int(np.floor(vehicle_y / STEP_config['grid_resolution']))
             max_radius_cells = int(STEP_config['radius_filter'] / STEP_config['grid_resolution'])
-            grid_map_ground.prune_far(veh_gx, veh_gy, max_radius_cells)
+            # grid_map_ground.prune_far(veh_gx, veh_gy, max_radius_cells)
 
             ground_points, semrisk_points, semconf_points, count_points = grid_map_ground.get_estimates()
 
 
-            ground_points  = filter_points_by_radius(ground_points,  veh_xy, STEP_config['radius_filter'])
-            semrisk_points = filter_points_by_radius(semrisk_points, veh_xy, STEP_config['radius_filter'])
-            semconf_points = filter_points_by_radius(semconf_points, veh_xy, STEP_config['radius_filter'])
-            count_points   = filter_points_by_radius(count_points,   veh_xy, STEP_config['radius_filter'])
+            # ground_points  = filter_points_by_radius(ground_points,  veh_xy, STEP_config['radius_filter'])
+            # semrisk_points = filter_points_by_radius(semrisk_points, veh_xy, STEP_config['radius_filter'])
+            # semconf_points = filter_points_by_radius(semconf_points, veh_xy, STEP_config['radius_filter'])
+            # count_points   = filter_points_by_radius(count_points,   veh_xy, STEP_config['radius_filter'])
 
             if ground_points.size == 0: continue
             Z_ground, _, _, _ = binned_statistic_2d(
@@ -300,8 +295,8 @@ if __name__ == "__main__":
                 count_points[:,0], count_points[:,1], count_points[:,2],
                 statistic='mean', bins=[x_edges, y_edges]
             )
-            sem_conf_grid = np.nan_to_num(sem_conf_mean) * np.tanh(np.nan_to_num(sem_count) / 8.0)
-            # sem_conf_grid = np.nan_to_num(sem_conf_mean)
+            # sem_conf_grid = np.nan_to_num(sem_conf_mean) * np.tanh(np.nan_to_num(sem_count) / 8.0)
+            sem_conf_grid = np.nan_to_num(sem_conf_mean)
             # Calculate risk grids.
             non_nan_indices = np.argwhere(~np.isnan(Z_ground))
             step_risk_grid, slope_risk_grid = calculate_combined_risks(
@@ -363,7 +358,7 @@ if __name__ == "__main__":
             # Exclude cells with lidar support from the annulus
             support_mask = np.nan_to_num(N_ground) > 0
             # Current ring mask based on distance only
-            ring_mask = (distance_from_vehicle >= 1.7) & (distance_from_vehicle <= 3.5)
+            ring_mask = (distance_from_vehicle >= 1.7) & (distance_from_vehicle <= 3.475)
             # Initialize or update persistent annulus mask; drop cells where support appears
             if (persist_annulus_mask is None) or (persist_annulus_mask.shape != risk_grid.shape):
                 persist_annulus_mask = ring_mask & (~support_mask)
@@ -377,20 +372,51 @@ if __name__ == "__main__":
 
             # Fill remaining NaNs in persistent annulus to MAX_RTSK_VALUE
             risk_grid[nan_mask_initial & persist_annulus_mask] = STEP_config['MAX_RTSK_VALUE']
-
-            # Persist risk for next iteration
             prev_risk_grid = risk_grid.copy()
 
             # Fill remaining NaNs to mid risk (as before)
             risk_grid = np.nan_to_num(risk_grid, nan=25.0)
-            risk_grid[distance_from_vehicle > STEP_config['distance_ignored']] = np.nan
+            # risk_grid[distance_from_vehicle > STEP_config['distance_ignored']] = np.nan
+            with np.errstate(invalid='ignore'):
+                max_val  = STEP_config['MAX_RTSK_VALUE']
+
+                # robust high-risk definition (treat non-finite as high too if desired)
+                high_thr = 0.9 * np.nanmax(risk_grid)
+                finite   = np.isfinite(risk_grid)
+                high_mask = finite & (risk_grid >= high_thr)
+                if STEP_config.get('prox_treat_nan_as_high', False):
+                    high_mask |= ~finite  # optional: NaN areas behave as "high" blobs
+
+                outside = (~high_mask) & finite
+
+                # distance from boundary, in meters (0 exactly at the first outside cell):
+                dist_cells = distance_transform_edt(~high_mask)   # 0 on boundary outside
+                dist_m = dist_cells * STEP_config['grid_resolution']
+
+                # parameters
+                radius_m   = float(STEP_config.get('inflation_radius', 0.8))   # halo width
+                boundary_p = float(STEP_config.get('halo_boundary_level', 0.7))  # 0..1 of MAX at boundary
+                profile    = STEP_config.get('inflation_profile', 'smoothstep')   # 'smoothstep'|'gaussian'|'poly'
+
+                # set boundary level explicitly vs current local value
+                boundary_p = float(STEP_config.get('halo_boundary_level', 0.7))
+                max_val = STEP_config['MAX_RTSK_VALUE']
+                boundary_target = boundary_p * max_val
+
+                # Keep fades tied to boundary, not absolute zero, so holes remain "repulsive"
+                t = np.clip(dist_m / max(radius_m, 1e-6), 0.0, 1.0)
+                s = t*t*(3.0 - 2.0*t)  # smoothstep
+                w = 1.0 - s            # 1 at boundary, 0 by radius
+                want = np.clip(boundary_target - risk_grid, 0.0, max_val)
+                add_cost = w * want
+                risk_grid[outside] = np.clip(risk_grid[outside] + add_cost[outside], 0.0, max_val)
 
 
             trigger_temp_dest = False
             valid = np.argwhere(~np.isnan(risk_grid))
             if temp_goal_idx is None or (temp_dest_xy is not None and
                                          np.hypot(vehicle_x - temp_dest_xy[0],
-                                                  vehicle_y - temp_dest_xy[1]) < STEP_config['distance_to_temp'])or stats_dict['count'] %15 ==0:
+                                                  vehicle_y - temp_dest_xy[1]) < STEP_config['distance_to_temp'])or stats_dict['count'] %20 ==0:
                 if valid.size > 0:
                     centers = np.column_stack((x_mid[valid[:,0]], y_mid[valid[:,1]]))
                     dists_to_goal = np.linalg.norm(centers - destination_point, axis=1)
@@ -486,6 +512,16 @@ if __name__ == "__main__":
             psi0 = math.atan2(R[1,0], R[0,0])
             x0   = np.array([vehicle_x, vehicle_y, psi0])
             try:
+                # estimate end-to-end latency (try 0.12–0.20s)
+                LAT = 0.15
+                n_shift = int(round(LAT / max(dt_loop, 1e-3)))
+
+                # build ref starting a bit ahead
+                i_ref0 = min(i0 + 1 + n_shift, len(smoothed_path) - 1)
+                ref_pts = smoothed_path[i_ref0 : i_ref0 + nmpc.N]
+                if len(ref_pts) < nmpc.N:
+                    ref_pts = np.vstack([ref_pts, np.tile(ref_pts[-1], (nmpc.N - len(ref_pts), 1))])
+
                 v_cmd, δ_cmd = nmpc.solve(x0, ref_pts, [dt_loop]*nmpc.N)
             except Exception:
                 v_cmd, δ_cmd = (0.0, 0.0)
@@ -510,7 +546,6 @@ if __name__ == "__main__":
             lidar_test.client.setCarControls(ctr)
 
             
-            # Visualization
             now_viz = time.time()
             if STEP_config['visualize'] and (now_viz - last_viz_t) >= STEP_config.get('viz_dt', 0.25):
                 ax.clear()
@@ -545,7 +580,7 @@ if __name__ == "__main__":
                 # plt.draw(); plt.pause(0.001)
                 last_viz_t = now_viz
                 if STEP_config['Capturing']:
-                    path = os.path.join(base, "record/combine_3", args.name)
+                    path = os.path.join(base, "record/combine_7", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -561,7 +596,8 @@ if __name__ == "__main__":
             stats_dict['count'] += 1
             if lidar_test.client.simGetCollisionInfo().has_collided:
                 stats_dict['collision_count'] += 1
-
+                ci = lidar_test.client.simGetCollisionInfo()
+                stats_dict['collision_info'].append(serialize(ci))
             distance_last = np.linalg.norm(destination_point - np.array([vehicle_x, vehicle_y]))
             # stats_dict['dist_to_goal'].append(distance_last)
             if distance_last < STEP_config['distance_to_goal']:
@@ -588,7 +624,7 @@ if __name__ == "__main__":
     
     # path to your “master” stats file
     os.chdir(base)
-    stats_file = os.path.join(base, "record/combine_stats_3.json")
+    stats_file = os.path.join(base, "record/combine_stats_7.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
@@ -604,7 +640,8 @@ if __name__ == "__main__":
         "collision_count": stats_dict["collision_count"],
         "total_length": stats_dict["total_length"],
         "dist_to_goal": stats_dict["dist_to_goal"],
-        "current_pos": stats_dict["current_pos"]
+        "current_pos": stats_dict["current_pos"],
+        "collision_info": stats_dict["collision_info"]
     })
 
     if STEP_config['Capturing']:

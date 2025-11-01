@@ -152,7 +152,7 @@ STEP_config ={
     'MAX_RTSK_VALUE': 50,
     'visualize': True,
     'Capturing': True,
-    'MAX_ITER': 350,
+    'MAX_ITER': 500,
 }
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -269,10 +269,10 @@ if __name__ == "__main__":
             ground_points, semrisk_points, semconf_points, count_points = grid_map_ground.get_estimates()
 
 
-            ground_points  = filter_points_by_radius(ground_points,  veh_xy, STEP_config['radius_filter'])
-            semrisk_points = filter_points_by_radius(semrisk_points, veh_xy, STEP_config['radius_filter'])
-            semconf_points = filter_points_by_radius(semconf_points, veh_xy, STEP_config['radius_filter'])
-            count_points   = filter_points_by_radius(count_points,   veh_xy, STEP_config['radius_filter'])
+            # ground_points  = filter_points_by_radius(ground_points,  veh_xy, STEP_config['radius_filter'])
+            # semrisk_points = filter_points_by_radius(semrisk_points, veh_xy, STEP_config['radius_filter'])
+            # semconf_points = filter_points_by_radius(semconf_points, veh_xy, STEP_config['radius_filter'])
+            # count_points   = filter_points_by_radius(count_points,   veh_xy, STEP_config['radius_filter'])
 
             if ground_points.size == 0: continue
             Z_ground, _, _, _ = binned_statistic_2d(
@@ -374,9 +374,13 @@ if __name__ == "__main__":
             risk_grid[nan_mask_initial & persist_annulus_mask] = STEP_config['MAX_RTSK_VALUE']
             prev_risk_grid = risk_grid.copy()
 
-            # Fill remaining NaNs to mid risk (as before)
-            risk_grid = np.nan_to_num(risk_grid, nan=25.0)
-            risk_grid[distance_from_vehicle > STEP_config['distance_ignored']] = np.nan
+            # Fill remaining NaNs to mid risk within the distanc eignored
+            
+            # risk_grid = np.nan_to_num(risk_grid, nan=25.0)
+            nan_mask   = np.isnan(risk_grid)
+            near_mask  = (distance_from_vehicle < STEP_config['distance_ignored'])
+            fill_mask  = nan_mask & near_mask
+            risk_grid[fill_mask] = 25.0
             with np.errstate(invalid='ignore'):
                 max_val  = STEP_config['MAX_RTSK_VALUE']
 
@@ -413,32 +417,80 @@ if __name__ == "__main__":
 
 
             trigger_temp_dest = False
+            trigger_temp_dest = False
             valid = np.argwhere(~np.isnan(risk_grid))
-            if temp_goal_idx is None or (temp_dest_xy is not None and
-                                         np.hypot(vehicle_x - temp_dest_xy[0],
-                                                  vehicle_y - temp_dest_xy[1]) < STEP_config['distance_to_temp'])or stats_dict['count'] %20 ==0:
+
+            # --- Select temp goal periodically or when close to previous one ---
+            if (temp_goal_idx is None or
+                (temp_dest_xy is not None and
+                np.hypot(vehicle_x - temp_dest_xy[0],
+                        vehicle_y - temp_dest_xy[1]) < STEP_config['distance_to_temp']) or
+                stats_dict['count'] % 20 == 0):
+
                 if valid.size > 0:
-                    centers = np.column_stack((x_mid[valid[:,0]], y_mid[valid[:,1]]))
+                    centers = np.column_stack((x_mid[valid[:, 0]], y_mid[valid[:, 1]]))
                     dists_to_goal = np.linalg.norm(centers - destination_point, axis=1)
                     best = valid[np.argmin(dists_to_goal)]
                     temp_goal_idx = (int(best[0]), int(best[1]))
-                    temp_dest_xy  = (float(x_mid[temp_goal_idx[0]]),
-                                     float(y_mid[temp_goal_idx[1]]))
+                    temp_dest_xy = (float(x_mid[temp_goal_idx[0]]),
+                                    float(y_mid[temp_goal_idx[1]]))
                     trigger_temp_dest = True
 
-   
+            # --- Define start index ---
             rows, cols = risk_grid.shape
             raw_si = np.digitize(vehicle_x, x_edges) - 1
             raw_sj = np.digitize(vehicle_y, y_edges) - 1
-            start_idx = (int(np.clip(raw_si, 0, rows-1)),
-                         int(np.clip(raw_sj, 0, cols-1)))
+            start_idx = (int(np.clip(raw_si, 0, rows - 1)),
+                        int(np.clip(raw_sj, 0, cols - 1)))
 
+            # --- Default goal ---
             if temp_goal_idx is None:
                 goal_idx = start_idx
             else:
                 gi, gj = temp_goal_idx
-                goal_idx = (int(np.clip(gi, 0, rows-1)),
-                            int(np.clip(gj, 0, cols-1)))
+                goal_val = risk_grid[gi, gj]
+
+                # --- if temp goal is NOT high-risk -> find closest safe cell near the final goal ---
+                if goal_val < STEP_config['MAX_RTSK_VALUE'] * 0.95:
+                    safe_mask = (~np.isnan(risk_grid)) & (risk_grid < STEP_config['MAX_RTSK_VALUE'] * 0.95)
+                    safe_cells = np.argwhere(safe_mask)
+                    if safe_cells.size > 0:
+                        # find the safe cell closest to the *final goal*
+                        centers = np.column_stack((x_mid[safe_cells[:, 0]], y_mid[safe_cells[:, 1]]))
+                        dists_to_final = np.linalg.norm(centers - destination_point, axis=1)
+                        nearest_safe = safe_cells[np.argmin(dists_to_final)]
+                        gi, gj = int(nearest_safe[0]), int(nearest_safe[1])
+                        temp_goal_idx = (gi, gj)
+                        temp_dest_xy = (float(x_mid[gi]), float(y_mid[gj]))
+
+                # --- if temp goal IS at moderate/high risk (~50%) -> trigger flip-around behavior ---
+                elif goal_val >= STEP_config['MAX_RTSK_VALUE'] * 0.5:
+                    safe_mask = (~np.isnan(risk_grid)) & (risk_grid < STEP_config['MAX_RTSK_VALUE'] * 0.95)
+                    safe_cells = np.argwhere(safe_mask)
+                    if safe_cells.size > 0:
+                        gxy = np.array(destination_point)
+                        vxy = np.array([vehicle_x, vehicle_y])
+                        g_to_v = vxy - gxy
+                        g_to_v /= (np.linalg.norm(g_to_v) + 1e-9)
+
+                        centers = np.column_stack((x_mid[safe_cells[:, 0]], y_mid[safe_cells[:, 1]]))
+                        dirs = centers - gxy
+                        dirs /= (np.linalg.norm(dirs, axis=1, keepdims=True) + 1e-9)
+                        dots = (dirs @ g_to_v)
+                        opposite_mask = dots <= 0  # opposite side of vehicle
+                        if np.any(opposite_mask):
+                            opp_cells = safe_cells[opposite_mask]
+                            dists = np.linalg.norm(centers[opposite_mask] - gxy, axis=1)
+                            best_opp = opp_cells[np.argmin(dists)]
+                            gi, gj = int(best_opp[0]), int(best_opp[1])
+                            temp_goal_idx = (gi, gj)
+                            temp_dest_xy = (float(x_mid[gi]), float(y_mid[gj]))
+
+                # --- finalize goal indices ---
+                gi = int(np.clip(gi, 0, rows - 1))
+                gj = int(np.clip(gj, 0, cols - 1))
+                goal_idx = (gi, gj)
+
 
             # ------------ plan ------------
             planner = AStarPlanner(risk_grid)
@@ -580,7 +632,7 @@ if __name__ == "__main__":
                 # plt.draw(); plt.pause(0.001)
                 last_viz_t = now_viz
                 if STEP_config['Capturing']:
-                    path = os.path.join(base, "record/combine_6", args.name)
+                    path = os.path.join(base, "record/test_10", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -624,7 +676,7 @@ if __name__ == "__main__":
     
     # path to your “master” stats file
     os.chdir(base)
-    stats_file = os.path.join(base, "record/combine_stats_6.json")
+    stats_file = os.path.join(base, "record/test_stats_10.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
