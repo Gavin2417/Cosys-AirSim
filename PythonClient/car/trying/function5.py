@@ -299,65 +299,65 @@ class NMPCController:
         rhs = ca.vertcat(v*ca.cos(psi),
                          v*ca.sin(psi),
                          v/self.L * ca.tan(dlt))
-        f   = ca.Function('f', [states, controls], [rhs])
+        self.f   = ca.Function('f', [states, controls], [rhs])
 
         # decision variables
         X = ca.SX.sym('X', 3, self.N+1)
         U = ca.SX.sym('U', 2, self.N)
 
         # parameters: [ x0(3), ref_x/ref_y (2*N), dt_seq (N) ]
-        P = ca.SX.sym('P', 3 + 2*self.N + self.N)
+        P = ca.SX.sym('P', 3 + 2*self.N + self.N + self.N + self.N)
+        # idx helpers
+        def idx_xr(k):   return 3 + 2*k
+        def idx_yr(k):   return 3 + 2*k + 1
+        def idx_dt(k):   return 3 + 2*self.N + k
+        def idx_psir(k): return 3 + 2*self.N + self.N + k
+        def idx_vr(k):   return 3 + 2*self.N + self.N + self.N + k
 
-        g   = []
-        obj = 0
-
-        # initial-state
+        # … constraints g, objective obj
+        g = []; obj = 0
         g.append(X[:,0] - P[0:3])
 
         for k in range(self.N):
-            # inside for k in range(self.N):
-            xr = P[3 + 2*k]
-            yr = P[3 + 2*k + 1]
-            dt_k = P[3 + 2*self.N + k]
+            st  = X[:,k]
+            uc  = U[:,k]
+            xr, yr  = P[idx_xr(k)],   P[idx_yr(k)]
+            dt_k    = P[idx_dt(k)]
+            psi_r   = P[idx_psir(k)]
+            v_r     = P[idx_vr(k)]
 
-            st = X[:,k]
-            uc = U[:,k]
-
-            # --- Frenet-style error (cross-track + heading) ---
             dx = xr - st[0]
             dy = yr - st[1]
-            des_psi = ca.atan2(dy, dx)                     # path tangent
-            # cross-track error (signed, in body frame)
-            e_ct = -ca.sin(st[2])*dx + ca.cos(st[2])*dy
-            # along-track error (optional, keep small weight)
-            e_at =  ca.cos(st[2])*dx + ca.sin(st[2])*dy
-            e_psi = ca.atan2(ca.sin(st[2] - des_psi), ca.cos(st[2] - des_psi))
 
-            # weights (tune aggressively if you’re lagging)
-            w_ct, w_at, w_psi = 8.0, 0.5, 6.0
+            # Frenet-style errors
+            e_ct  = -ca.sin(st[2])*dx + ca.cos(st[2])*dy
+            e_at  =  ca.cos(st[2])*dx + ca.sin(st[2])*dy
+            e_psi = ca.atan2(ca.sin(st[2]-psi_r), ca.cos(st[2]-psi_r))
+
+            # weights (stronger cross-track & heading)
+            w_ct, w_at, w_psi = 10.0, 0.2, 8.0
             obj += w_ct*e_ct**2 + w_at*e_at**2 + w_psi*e_psi**2
 
-            # control effort
-            obj += ca.mtimes([uc.T, self.R_u, uc]) * dt_k
+            # velocity tracking + effort
+            obj += 0.8*(uc[0] - v_r)**2 + ca.mtimes([uc.T, self.R_u, uc]) * dt_k
 
-            # smoothness
+            # rate penalties
             if k > 0:
                 du = U[:,k] - U[:,k-1]
-                obj += self.R_du * ca.sumsqr(du)
+                obj += 0.2*du[0]**2 + 3.0*du[1]**2
 
             # dynamics
-            st_next = X[:,k+1]
-            fval = f(st, uc)
-            g.append(st_next - (st + dt_k * fval))
+            fval = self.f(st, uc)  # store self.f earlier
+            g.append(X[:,k+1] - (st + dt_k * fval))
 
-        # terminal cost
-        errT = X[:,self.N] - ca.vertcat(
-            P[3+2*(self.N-1)],
-            P[3+2*(self.N-1)+1],
-            0
-        )
-        Qf = np.diag([15, 15, 8])   # was [10,10,5]
-        obj += ca.mtimes([errT.T, Qf, errT])
+        # terminal cost vs last stage refs
+        xr_T = P[idx_xr(self.N-1)]
+        yr_T = P[idx_yr(self.N-1)]
+        psi_T= P[idx_psir(self.N-1)]
+        err_pos = X[0:2,self.N] - ca.vertcat(xr_T, yr_T)
+        err_psi = ca.atan2(ca.sin(X[2,self.N]-psi_T), ca.cos(X[2,self.N]-psi_T))
+        Qf_pos = np.diag([25,25])
+        obj += ca.mtimes([err_pos.T, Qf_pos, err_pos]) + 12.0*err_psi**2
 
         # build the NLP
         G   = ca.vertcat(*g)
@@ -385,35 +385,39 @@ class NMPCController:
 
         # bounds (X free, U in [0,V_max]×[-δ_max,δ_max])
         nX = 3*(self.N+1)
-        self.lbx = [-ca.inf]*nX + [0, -self.delta_max]*self.N
+        self.lbx = [-ca.inf]*nX + [0.02, -self.delta_max]*self.N
         self.ubx = [ ca.inf]*nX + [self.V_max, self.delta_max]*self.N
         self.lbg = [0]*G.size1()
         self.ubg = [0]*G.size1()
 
-    def solve(self, x0, ref_traj, dt_seq):
+    def solve(self, x0, ref_xy, ref_psi, ref_v, dt_seq):
         N = self.N
-        assert len(dt_seq)==N
+        assert len(ref_xy)==len(ref_psi)==len(ref_v)==len(dt_seq)==N
+
         if self._x_init is None:
             x_init = np.tile(x0, (N+1,1))
             u_init = np.zeros((N,2))
         else:
-            x_init = self._x_init
-            u_init = self._u_init
-        p = np.concatenate([x0, ref_traj[:N].reshape(-1), np.array(dt_seq)])
-        x_init = np.tile(x0, (N+1,1))
-        u_init = np.zeros((N,2))
-        init   = np.concatenate([x_init.flatten(), u_init.flatten()])
+            x_init = self._x_init.copy()
+            u_init = self._u_init.copy()
 
-        sol = self.solver(x0=init,
-                          lbx=self.lbx, ubx=self.ubx,
-                          lbg=self.lbg, ubg=self.ubg,
-                          p=p)
+        P = np.concatenate([
+            x0,
+            ref_xy.reshape(-1),    # 2N
+            np.asarray(dt_seq),    # N
+            ref_psi,               # N
+            ref_v                  # N
+        ], axis=0)
+
+        init = np.concatenate([x_init.ravel(), u_init.ravel()])
+        sol  = self.solver(x0=init, lbx=self.lbx, ubx=self.ubx,
+                        lbg=self.lbg, ubg=self.ubg, p=P)
         flat = sol['x'].full().ravel()
-        U_opt = flat[-2*N:].reshape(N,2)
-        X_opt = flat[:3*(N+1)].reshape(N+1,3)
-        self._x_init = X_opt
-        self._u_init = U_opt
-        return U_opt[0]  
+        Xopt = flat[:3*(N+1)].reshape(N+1,3)
+        Uopt = flat[3*(N+1):].reshape(N,2)
+        self._x_init, self._u_init = Xopt, Uopt
+        return Uopt[0]  # (v, delta)
+
 ### FUNCTIONS
 
 def smooth_path(path, window_size=5):
