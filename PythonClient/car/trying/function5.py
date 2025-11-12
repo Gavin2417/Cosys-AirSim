@@ -12,7 +12,8 @@ from scipy.ndimage import distance_transform_edt, binary_dilation, generate_bina
 import numpy as np
 from scipy.ndimage import convolve
 from numba import njit, prange
-
+from scipy.ndimage import convolve
+from scipy.interpolate import CubicSpline
 
 def calculate_combined_risks(Z_grid, non_nan_indices, max_height_diff=0.4, max_slope_degrees=30.0, radius=0.3):
     """
@@ -498,3 +499,134 @@ def needs_recentering(vehicle_xy, dest_xy, x_edges, y_edges, buffer=1.0):
     near_top    = y > y_edges[-1] - buffer
     dest_out    = not in_edges(dest_xy, x_edges, y_edges)
     return near_left or near_right or near_bottom or near_top or dest_out
+
+def euler_from_R(R):
+    """
+    Returns roll, pitch, yaw in radians from a 3x3 rotation matrix.
+    Assumes R maps body->world (consistent with your yaw = atan2(R[1,0], R[0,0])).
+    """
+    roll  = math.atan2(R[2,1], R[2,2])
+    pitch = -math.asin(max(-1.0, min(1.0, R[2,0])))
+    yaw   = math.atan2(R[1,0], R[0,0])
+    return roll, pitch, yaw
+
+def is_flipped(R, up_z_threshold=0.3, angle_deg_threshold=85.0):
+    """
+    Flip if the vehicle's body 'up' axis points too little toward world +Z
+    OR if roll/pitch exceed a large angle threshold.
+    """
+    # world-up alignment of body-Z axis:
+    up_world = R[:, 2]         # body z-axis expressed in world frame
+    if float(up_world[2]) < up_z_threshold:
+        return True
+
+    roll, pitch, _ = euler_from_R(R)
+    return (abs(math.degrees(roll))  > angle_deg_threshold or
+            abs(math.degrees(pitch)) > angle_deg_threshold)
+
+# --- add these small helpers near your other utils ---
+def remap_mask(old_mask, old_x_mid, old_y_mid, new_x_edges, new_y_edges, new_shape):
+    """
+    Map a boolean mask defined on (old_x_mid, old_y_mid) to the new grid defined by new_x_edges/new_y_edges.
+    Grid convention: indexing='ij' -> axis 0 is x, axis 1 is y.
+    """
+    if old_mask is None:
+        return np.zeros(new_shape, dtype=bool)
+
+    ii, jj = np.nonzero(old_mask)
+    if ii.size == 0:
+        return np.zeros(new_shape, dtype=bool)
+
+    xs = old_x_mid[ii]
+    ys = old_y_mid[jj]
+
+    ni = np.clip(np.digitize(xs, new_x_edges) - 1, 0, new_shape[0]-1)
+    nj = np.clip(np.digitize(ys, new_y_edges) - 1, 0, new_shape[1]-1)
+
+    new_mask = np.zeros(new_shape, dtype=bool)
+    new_mask[ni, nj] = True
+    return new_mask
+
+def remap_values(old_vals, old_x_mid, old_y_mid, new_x_edges, new_y_edges, new_shape, reducer=np.nanmax):
+    """
+    Map a value grid (e.g., prev_risk_grid) to the new grid.
+    Multiple old cells may land in one new cell -> reduce with `reducer` (nanmax by default).
+    """
+    if old_vals is None:
+        return None
+
+    ii, jj = np.where(np.isfinite(old_vals))
+    if ii.size == 0:
+        return np.full(new_shape, np.nan, dtype=float)
+
+    xs = old_x_mid[ii]
+    ys = old_y_mid[jj]
+    ni = np.clip(np.digitize(xs, new_x_edges) - 1, 0, new_shape[0]-1)
+    nj = np.clip(np.digitize(ys, new_y_edges) - 1, 0, new_shape[1]-1)
+
+    new_vals = np.full(new_shape, np.nan, dtype=float)
+    for k in range(ni.size):
+        i, j = ni[k], nj[k]
+        v = old_vals[ii[k], jj[k]]
+        if np.isnan(new_vals[i, j]):
+            new_vals[i, j] = v
+        else:
+            new_vals[i, j] = reducer([new_vals[i, j], v])
+    return new_vals
+
+def build_arc_length_path(raw_xy: np.ndarray, ds=0.15):
+    """
+    raw_xy: (M,2) points from A* (in world {x,y}, not grid indices)
+    returns:
+      S:   (K,) arc-length samples
+      XY:  (K,2) smoothed, arc-length sampled path
+      PSI: (K,) heading along the path (rad)
+      KAP: (K,) curvature (1/m)
+    """
+    if len(raw_xy) < 3:
+        XY = raw_xy.copy()
+        s  = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(XY, axis=0), axis=1))])
+        S  = np.arange(0, s[-1]+1e-9, max(ds, 1e-3))
+        psi = np.zeros_like(S)
+        kap = np.zeros_like(S)
+        return S, np.interp(S, s, XY[:,0])[:,None].repeat(2,1), psi, kap
+
+    seg = np.diff(raw_xy, axis=0)
+    s   = np.concatenate([[0.0], np.cumsum(np.linalg.norm(seg, axis=1))])
+    S   = np.arange(0.0, max(s[-1], ds)+1e-9, ds)
+
+    sx = CubicSpline(s, raw_xy[:,0], bc_type='clamped')
+    sy = CubicSpline(s, raw_xy[:,1], bc_type='clamped')
+
+    x  = sx(S);  y  = sy(S)
+    dx = sx(S,1); dy = sy(S,1)
+    ddx= sx(S,2); ddy= sy(S,2)
+
+    psi   = np.arctan2(dy, dx)
+    denom = np.maximum((dx*dx + dy*dy)**1.5, 1e-6)
+    kap   = (dx*ddy - dy*ddx)/denom
+    XY = np.column_stack([x,y])
+    return S, XY, psi, kap
+def curvature_speed(kappa, v_max=0.8, a_lat_max=1.0, v_min=0.15):
+    # v_curv = sqrt(a_lat_max / |kappa|) clipped by v_max
+    v_curv = np.sqrt(np.maximum(a_lat_max / np.maximum(np.abs(kappa), 1e-6), 0.0))
+    v = np.minimum(v_curv, v_max)
+    return np.clip(v, v_min, v_max)
+
+def risk_scaled_speed(xy, risk_grid, X_mesh, Y_mesh, base_v, max_risk=50.0, scale=0.5):
+    """
+    Reduces speed near risky cells up to `scale` fraction.
+    """
+    # nearest-cell lookup
+    centers = np.column_stack((X_mesh.ravel(), Y_mesh.ravel()))
+    tree = cKDTree(centers)
+    idx  = tree.query(xy, k=1)[1]
+    local_risk = risk_grid.ravel()[idx]
+    factor = 1.0 - scale*np.clip(local_risk/max_risk, 0, 1)
+    return np.clip(base_v * factor, 0.1, np.max(base_v))
+def pick_reference_window(xy_path, psi_path, v_path, ego_xy, N, lead_idx=1):
+    # closest arc-length sample to the car
+    d = np.linalg.norm(xy_path - ego_xy, axis=1)
+    i0 = int(np.argmin(d))
+    j  = np.clip(i0 + lead_idx + np.arange(N), 0, len(xy_path)-1)
+    return xy_path[j], psi_path[j], v_path[j], i0
