@@ -5,6 +5,7 @@ import numpy.ma as ma
 import matplotlib.pyplot as plt
 from scipy.stats import binned_statistic_2d
 from scipy.ndimage import distance_transform_edt, binary_dilation, generate_binary_structure
+from scipy.ndimage import label as _label
 from scipy.spatial import cKDTree
 from matplotlib.colors import LinearSegmentedColormap
 import cosysairsim as airsim
@@ -50,7 +51,7 @@ def path_cost(path_idx, cost_map):
 
 STEP_config ={
     # MAP
-    'grid_margin': 6,
+    'grid_margin': 8,
     'grid_resolution': 0.1,
     'radius_filter': 12,
 
@@ -189,17 +190,11 @@ if __name__ == "__main__":
 
                 ### NEW: remap old mask/values into the new grid coordinates
                 new_shape = (len(x_mid), len(y_mid))
-                remapped_mask = remap_mask(
-                    old_persist_mask, old_x_mid, old_y_mid,
-                    x_edges, y_edges, new_shape
-                )
+                
                 remapped_prev_risk = remap_values(
                     old_prev_risk, old_x_mid, old_y_mid,
                     x_edges, y_edges, new_shape, reducer=np.nanmax
                 )
-
-                # keep them available after recenter; will be merged below with ring/support
-                persist_annulus_mask = remapped_mask
                 prev_risk_grid = remapped_prev_risk
 
             # Record stats
@@ -222,7 +217,7 @@ if __name__ == "__main__":
                     grid_map_ground.add_point(x, y, z, timestamp)
             ground_points = grid_map_ground.get_height_estimate()
             obstacle_points = grid_map_obstacle.get_height_estimate()
-            ground_points = filter_points_by_radius(ground_points, veh_xy, STEP_config['radius_filter'])
+            # ground_points = filter_points_by_radius(ground_points, veh_xy, STEP_config['radius_filter'])
             if ground_points.size == 0: continue
             Z_ground, _, _, _ = binned_statistic_2d(
                 ground_points[:, 0], ground_points[:, 1], ground_points[:, 2], statistic='mean', bins=[x_edges, y_edges]
@@ -242,7 +237,7 @@ if __name__ == "__main__":
 
             # Incorporate obstacle risk.
             if obstacle_points.size != 0:
-                obstacle_points = filter_points_by_radius(obstacle_points, veh_xy, STEP_config['radius_filter'])
+                # obstacle_points = filter_points_by_radius(obstacle_points, veh_xy, STEP_config['radius_filter'])
                 if obstacle_points.size != 0:
                     obs_x_idx = np.clip(np.digitize(obstacle_points[:, 0], x_edges) - 1, 0, len(x_mid)-1)
                     obs_y_idx = np.clip(np.digitize(obstacle_points[:, 1], y_edges) - 1, 0, len(y_mid)-1)
@@ -260,17 +255,6 @@ if __name__ == "__main__":
             total_risk_grid = interpolate_in_radius(total_risk_grid, STEP_config['interpolate_radius'])
             masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
             risk_grid = compute_cvar_cellwise(masked_total_risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
-            risk_grid = np.nan_to_num(risk_grid, nan=25.0)
-            # Mask cells far from the vehicle.
-            distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
-            if distance_from_vehicle.shape != risk_grid.shape:
-                if distance_from_vehicle.T.shape == risk_grid.shape:
-                    distance_from_vehicle = distance_from_vehicle.T
-                else:
-                    X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
-                    distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
-            risk_grid[distance_from_vehicle > STEP_config['distance_ignored']] = np.nan
-
             nan_mask_initial = np.isnan(risk_grid)
 
             # Calculate distance from vehicle and ensure mask shape matches grid shape after any recentering
@@ -281,58 +265,14 @@ if __name__ == "__main__":
                 else:
                     X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
                     distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
-            
-            # Exclude cells with lidar support from the annulus and calculate ring mask
-            support_mask = np.nan_to_num(Z_ground) > 0
-            ring_mask = (distance_from_vehicle >= 1.7) & (distance_from_vehicle <= 3.475)
-            if (persist_annulus_mask is None) or (persist_annulus_mask.shape != risk_grid.shape):
-                # start from remapped (if any) OR zeros
-                base_mask = persist_annulus_mask if (persist_annulus_mask is not None and persist_annulus_mask.shape == risk_grid.shape) else np.zeros_like(risk_grid, dtype=bool)
-                persist_annulus_mask = (base_mask | ring_mask) & (~support_mask)
-            else:
-                persist_annulus_mask = (persist_annulus_mask | ring_mask) & (~support_mask)
 
             # Carry over previous values inside persistent annulus into current NaNs (shape-safe)
             if 'prev_risk_grid' in locals() and prev_risk_grid is not None and prev_risk_grid.shape == risk_grid.shape:
-                carry_mask = nan_mask_initial & persist_annulus_mask
+                carry_mask = nan_mask_initial 
                 risk_grid[carry_mask] = prev_risk_grid[carry_mask]
 
-            # Fill remaining NaNs in persistent annulus to MAX_RTSK_VALUE
-            risk_grid[nan_mask_initial & persist_annulus_mask] = STEP_config['MAX_RTSK_VALUE']
             prev_risk_grid = risk_grid.copy()
             risk_grid = np.nan_to_num(risk_grid, nan=25.0)
-           
-            with np.errstate(invalid='ignore'):
-                max_val  = STEP_config['MAX_RTSK_VALUE']
-
-                # robust high-risk definition (treat non-finite as high too if desired)
-                high_thr = 0.9 * np.nanmax(risk_grid)
-                finite   = np.isfinite(risk_grid)
-                high_mask = finite & (risk_grid >= high_thr)
-                if STEP_config.get('prox_treat_nan_as_high', False):
-                    high_mask |= ~finite  # optional: NaN areas behave as "high" blobs
-                outside = (~high_mask) & finite
-
-                # distance from boundary, in meters (0 exactly at the first outside cell):
-                dist_cells = distance_transform_edt(~high_mask)   # 0 on boundary outside
-                dist_m = dist_cells * STEP_config['grid_resolution']
-                radius_m   = float(STEP_config.get('inflation_radius', 0.8))   # halo width
-                boundary_p = float(STEP_config.get('halo_boundary_level', 0.7))  # 0..1 of MAX at boundary
-                profile    = STEP_config.get('inflation_profile', 'smoothstep')   # 'smoothstep'|'gaussian'|'poly'
-
-                # set boundary level explicitly vs current local value
-                boundary_p = float(STEP_config.get('halo_boundary_level', 0.7))
-                max_val = STEP_config['MAX_RTSK_VALUE']
-                boundary_target = boundary_p * max_val
-
-                # Keep fades tied to boundary, not absolute zero, so holes remain "repulsive"
-                t = np.clip(dist_m / max(radius_m, 1e-6), 0.0, 1.0)
-                s = t*t*(3.0 - 2.0*t)  # smoothstep
-                w = 1.0 - s            # 1 at boundary, 0 by radius
-                want = np.clip(boundary_target - risk_grid, 0.0, max_val)
-                add_cost = w * want
-                risk_grid[outside] = np.clip(risk_grid[outside] + add_cost[outside], 0.0, max_val)
-
             trigger_temp_dest = False
             valid = np.argwhere(~np.isnan(risk_grid))
 
@@ -393,7 +333,7 @@ if __name__ == "__main__":
                             best = np.argmin(np.linalg.norm(centers - gxy, axis=1))
                             gi, gj = int(hi[best]), int(hj[best])
 
-                    labeled, ncc = label(high_mask, structure=struct)
+                    labeled, ncc = _label(high_mask, structure=struct)
                     if ncc > 0:
                         comp_id = labeled[gi, gj] if labeled[gi, gj] != 0 else 0
                     else:
@@ -604,7 +544,7 @@ if __name__ == "__main__":
                 # plt.draw(); plt.pause(0.001)
                 last_viz_t = now_viz
                 if STEP_config['Capturing']:
-                    path = os.path.join(base, "record/finalstep_1", args.name)
+                    path = os.path.join(base, "record/finalstep_3", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -661,7 +601,7 @@ if __name__ == "__main__":
     
     # path to your “master” stats file
     os.chdir(base)
-    stats_file = os.path.join(base, "record/finalstep_1.json")
+    stats_file = os.path.join(base, "record/finalstep_stats_3.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:

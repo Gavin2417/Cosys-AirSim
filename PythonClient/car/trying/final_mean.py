@@ -41,46 +41,6 @@ def fuse_geom_edge_preserving(step_risk, slope_risk, tau=0.35,        # edge thr
     fused = np.where(m, np.maximum(step, beta * gate * slope), np.nan)
     return fused
 
-def softmax_entropy(p, eps=1e-8):
-    p = np.clip(p, eps, 1.0)
-    H = -np.sum(p * np.log(p), axis=1)
-    Hmax = np.log(p.shape[1])
-    return H / Hmax  # 0..1  (0=confident, 1=uncertain)
-def step_risk_confidence(Z_mean_grid, N_count_grid, grid_resolution,
-                         radius_m=0.5, z_noise_std=0.02,
-                         w_cov=0.4, w_sup=0.3, w_cons=0.3, k_sup=6.0):
-    """
-    Confidence in [0,1] from local coverage, support, and height std.
-    """
-
-    r = max(1, int(np.round(radius_m / grid_resolution)))
-    k = 2*r + 1
-    K = np.ones((k, k), dtype=float)
-
-    valid = (~np.isnan(Z_mean_grid)).astype(float)
-    Z0 = np.nan_to_num(Z_mean_grid, nan=0.0)
-
-    sumZ   = convolve(Z0, K, mode='constant', cval=0.0)
-    sumZ2  = convolve(Z0*Z0, K, mode='constant', cval=0.0)
-    count  = convolve(valid, K, mode='constant', cval=0.0)
-
-    with np.errstate(invalid='ignore', divide='ignore'):
-        mean = np.where(count > 0, sumZ / count, np.nan)
-        mean2 = np.where(count > 0, sumZ2 / count, np.nan)
-        var = np.maximum(mean2 - mean**2, 0.0)
-        std = np.sqrt(var)
-
-    coverage = np.clip(count / (k*k), 0.0, 1.0)
-    support  = np.tanh(N_count_grid / max(k_sup, 1e-6))
-    consistency = 1.0 / (1.0 + (std / max(z_noise_std, 1e-6)))
-
-    eps = 1e-6
-    log_conf = (w_cov*np.log(coverage + eps) +
-                w_sup*np.log(support  + eps) +
-                w_cons*np.log(consistency + eps))
-    conf = np.exp(log_conf)
-    conf[np.isnan(Z_mean_grid)] = np.nan
-    return conf
 
 def path_cost(path_idx, cost_map):
     if path_idx is None:
@@ -96,37 +56,37 @@ def path_cost(path_idx, cost_map):
 
 class GridMap:
     def __init__(self, resolution):
-        self.resolution = float(resolution)
+        self.resolution = resolution
+        # Store (sum, count) per cell
         self.grid = {}
 
     def get_grid_cell(self, x, y):
-        ix = int(np.floor(x / self.resolution))
-        iy = int(np.floor(y / self.resolution))
-        return (ix, iy)
+        return (int(np.floor(x / self.resolution)), int(np.floor(y / self.resolution)))
 
-    def add_point(self, x, y, z, sem_risk, sem_conf):
+
+    def add_point(self, x, y, z, label):
         cell = self.get_grid_cell(x, y)
         if cell not in self.grid:
-            self.grid[cell] = [float(z), float(sem_risk), float(sem_conf), 1]
+            self.grid[cell] = [z, label, 1]
         else:
-            g = self.grid[cell]
-            g[0] += float(z); g[1] += float(sem_risk); g[2] += float(sem_conf); g[3] += 1
+            self.grid[cell][0] += z
+            self.grid[cell][1] += label
+            self.grid[cell][2] += 1
 
-    def get_estimates(self):
-        h, r, c, n = [], [], [], []
-        for (ix, iy), (zsum, rsum, csum, cnt) in self.grid.items():
-            cx = (ix + 0.5) * self.resolution
-            cy = (iy + 0.5) * self.resolution
-            inv = 1.0 / cnt
-            h.append([cx, cy, zsum*inv])
-            r.append([cx, cy, rsum*inv])
-            c.append([cx, cy, csum*inv])
-            n.append([cx, cy, cnt])
-        return np.array(h), np.array(r), np.array(c), np.array(n)
-
+    def get_height_estimate(self):
+        height_estimates = []
+        label_estimates = []
+        for (gx, gy), (z_sum, label_sum, count) in self.grid.items():
+            mean_z = float(z_sum/count)
+            mean_label = float(label_sum/count)
+            cx = (gx + 0.5) * self.resolution
+            cy = (gy + 0.5) * self.resolution
+            height_estimates.append([cx, cy, mean_z])
+            label_estimates.append([cx, cy, mean_label])
+        return np.array(height_estimates), np.array(label_estimates)
     def prune_far(self, cx, cy, max_radius_cells):
         to_del = []
-        for (gx, gy) in list(self.grid.keys()):
+        for (gx, gy) in self.grid.keys():
             if (gx - cx)**2 + (gy - cy)**2 > max_radius_cells**2:
                 to_del.append((gx, gy))
         for k in to_del:
@@ -267,17 +227,10 @@ if __name__ == "__main__":
 
                 ### NEW: remap old mask/values into the new grid coordinates
                 new_shape = (len(x_mid), len(y_mid))
-                remapped_mask = remap_mask(
-                    old_persist_mask, old_x_mid, old_y_mid,
-                    x_edges, y_edges, new_shape
-                )
                 remapped_prev_risk = remap_values(
                     old_prev_risk, old_x_mid, old_y_mid,
                     x_edges, y_edges, new_shape, reducer=np.nanmax
                 )
-
-                # keep them available after recenter; will be merged below with ring/support
-                persist_annulus_mask = remapped_mask
                 prev_risk_grid = remapped_prev_risk
 
             # Record stats
@@ -290,33 +243,18 @@ if __name__ == "__main__":
             
             # Use network outputs
             labels, all_probs = seg.segment(points_world)   # labels: [M], all_probs: [M, C]
-            p = all_probs                                   # already softmaxed
-            sem_risk_point = labels.astype(float)           # shape [M], scalar per point
-
-            # --- Confidence from entropy (0..1; 0=confident, 1=uncertain) ---
-            sem_conf_point = 1.0 - softmax_entropy(p)       # shape [M], scalar per point
-            for (x, y, z), r, c in zip(points_world, sem_risk_point, sem_conf_point):
-                grid_map_ground.add_point(x, y, z, r, c)
-            ground_points, semrisk_points, semconf_points, count_points = grid_map_ground.get_estimates()
+            for i, point in enumerate(points_world):
+                x, y, z = point
+                grid_map_ground.add_point(x, y, z, labels[i])
+            ground_points, label_points = grid_map_ground.get_height_estimate()
             if ground_points.size == 0: continue
             Z_ground, _, _, _ = binned_statistic_2d(
-            ground_points[:,0], ground_points[:,1], ground_points[:,2],
-                statistic='mean', bins=[x_edges, y_edges]
+                ground_points[:, 0], ground_points[:, 1], ground_points[:, 2], statistic='mean', bins=[x_edges, y_edges]
             )
-            # Semantic risk (already 0..50) + Semantic confidence (0..1) + support
-            sem_risk_grid, _, _, _ = binned_statistic_2d(
-                semrisk_points[:,0], semrisk_points[:,1], semrisk_points[:,2],
-                statistic='mean', bins=[x_edges, y_edges]
+            randla_risk_grid, _, _, _ = binned_statistic_2d(
+                label_points[:,0], label_points[:,1], label_points[:,2], statistic='mean', bins=[x_edges, y_edges]
             )
-            sem_conf_mean, _, _, _ = binned_statistic_2d(
-                semconf_points[:,0], semconf_points[:,1], semconf_points[:,2],
-                statistic='mean', bins=[x_edges, y_edges]
-            )
-            sem_count, _, _, _ = binned_statistic_2d(
-                count_points[:,0], count_points[:,1], count_points[:,2],
-                statistic='mean', bins=[x_edges, y_edges]
-            )
-            sem_conf_grid = np.nan_to_num(sem_conf_mean)
+
 
             # Calculate risk grids.
             non_nan_indices = np.argwhere(~np.isnan(Z_ground))
@@ -326,42 +264,11 @@ if __name__ == "__main__":
             geom_risk01 = fuse_geom_edge_preserving(step_risk_grid, slope_risk_grid, tau=0.35, beta=1.0)
             geom_risk_grid = np.clip(geom_risk01 * STEP_config['MAX_RTSK_VALUE'], 0, STEP_config['MAX_RTSK_VALUE'])
 
-            # geometric confidence from coverage/consistency (your function)
-            N_ground, _, _, _ = binned_statistic_2d(
-                ground_points[:,0], ground_points[:,1], ground_points[:,2],
-                statistic='count', bins=[x_edges, y_edges]
-            )
-            geom_conf_grid = step_risk_confidence(
-                Z_mean_grid=Z_ground,
-                N_count_grid=N_ground,
-                grid_resolution=STEP_config['grid_resolution'],
-                radius_m=STEP_config['risk_radius']+0.4,
-                z_noise_std=0.02,
-                w_cov=0.4, w_sup=0.3, w_cons=0.3, k_sup=8.0
-            )
-            eps = 1e-8
-
-            # 1) Normal confidence-weighted average (like before)
-            num = (geom_conf_grid * np.nan_to_num(geom_risk_grid) +
-                sem_conf_grid  * np.nan_to_num(sem_risk_grid))
-            den = np.maximum(geom_conf_grid + sem_conf_grid, eps)
-            fused_avg = num / den
-
-            # 2) Risk inflation penalty (uncertainty → push toward worst case)
-            # use the *highest confidence* among the two as the "trust level"
-            max_conf = np.nanmax(np.stack([geom_conf_grid, sem_conf_grid]), axis=0)
-            penalty = (1.0 - max_conf) * STEP_config['MAX_RTSK_VALUE'] * 0.1  # 0.3 = inflation factor
-
-            # 3) Final fused risk
-            total_risk_grid = fused_avg + penalty
-            total_risk_grid = np.clip(total_risk_grid, 0, STEP_config['MAX_RTSK_VALUE'])
-
-            # 4) Same interpolation and CVaR as before
+            total_risk_grid = (geom_risk_grid+ randla_risk_grid) / 2.0
             total_risk_grid = interpolate_in_radius(total_risk_grid, STEP_config['interpolate_radius'])
             masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-            risk_grid = compute_cvar_cellwise(masked_total_risk_grid,
-                                            alpha=STEP_config['cvar_a'],
-                                            radius=STEP_config['cvar_radius'])
+            risk_grid = compute_cvar_cellwise(masked_total_risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
+            risk_grid = np.nan_to_num(risk_grid, nan=25.0)
             nan_mask_initial = np.isnan(risk_grid)
 
             # Calculate distance from vehicle and ensure mask shape matches grid shape after any recentering
@@ -373,57 +280,8 @@ if __name__ == "__main__":
                     X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
                     distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
             
-            # Exclude cells with lidar support from the annulus and calculate ring mask
-            support_mask = np.nan_to_num(N_ground) > 0
-            ring_mask = (distance_from_vehicle >= 1.7) & (distance_from_vehicle <= 3.475)
-            if (persist_annulus_mask is None) or (persist_annulus_mask.shape != risk_grid.shape):
-                # start from remapped (if any) OR zeros
-                base_mask = persist_annulus_mask if (persist_annulus_mask is not None and persist_annulus_mask.shape == risk_grid.shape) else np.zeros_like(risk_grid, dtype=bool)
-                persist_annulus_mask = (base_mask | ring_mask) & (~support_mask)
-            else:
-                persist_annulus_mask = (persist_annulus_mask | ring_mask) & (~support_mask)
-
-            # Carry over previous values inside persistent annulus into current NaNs (shape-safe)
-            if 'prev_risk_grid' in locals() and prev_risk_grid is not None and prev_risk_grid.shape == risk_grid.shape:
-                carry_mask = nan_mask_initial & persist_annulus_mask
-                risk_grid[carry_mask] = prev_risk_grid[carry_mask]
-
-            # Fill remaining NaNs in persistent annulus to MAX_RTSK_VALUE
-            risk_grid[nan_mask_initial & persist_annulus_mask] = STEP_config['MAX_RTSK_VALUE']
             prev_risk_grid = risk_grid.copy()
             risk_grid = np.nan_to_num(risk_grid, nan=25.0)
-           
-            with np.errstate(invalid='ignore'):
-                max_val  = STEP_config['MAX_RTSK_VALUE']
-
-                # robust high-risk definition (treat non-finite as high too if desired)
-                high_thr = 0.9 * np.nanmax(risk_grid)
-                finite   = np.isfinite(risk_grid)
-                high_mask = finite & (risk_grid >= high_thr)
-                if STEP_config.get('prox_treat_nan_as_high', False):
-                    high_mask |= ~finite  # optional: NaN areas behave as "high" blobs
-                outside = (~high_mask) & finite
-
-                # distance from boundary, in meters (0 exactly at the first outside cell):
-                dist_cells = distance_transform_edt(~high_mask)   # 0 on boundary outside
-                dist_m = dist_cells * STEP_config['grid_resolution']
-                radius_m   = float(STEP_config.get('inflation_radius', 0.8))   # halo width
-                boundary_p = float(STEP_config.get('halo_boundary_level', 0.7))  # 0..1 of MAX at boundary
-                profile    = STEP_config.get('inflation_profile', 'smoothstep')   # 'smoothstep'|'gaussian'|'poly'
-
-                # set boundary level explicitly vs current local value
-                boundary_p = float(STEP_config.get('halo_boundary_level', 0.7))
-                max_val = STEP_config['MAX_RTSK_VALUE']
-                boundary_target = boundary_p * max_val
-
-                # Keep fades tied to boundary, not absolute zero, so holes remain "repulsive"
-                t = np.clip(dist_m / max(radius_m, 1e-6), 0.0, 1.0)
-                s = t*t*(3.0 - 2.0*t)  # smoothstep
-                w = 1.0 - s            # 1 at boundary, 0 by radius
-                want = np.clip(boundary_target - risk_grid, 0.0, max_val)
-                add_cost = w * want
-                risk_grid[outside] = np.clip(risk_grid[outside] + add_cost[outside], 0.0, max_val)
-
             trigger_temp_dest = False
             valid = np.argwhere(~np.isnan(risk_grid))
 
@@ -540,6 +398,8 @@ if __name__ == "__main__":
                 temp_goal_idx = goal_idx
                 temp_dest_xy  = (float(x_mid[gi]), float(y_mid[gj]))
                 trigger_temp_dest = True
+
+
 
             # ------------ plan (Hysteresis + stickiness on replans)------------
             planner = AStarPlanner(risk_grid)
@@ -693,7 +553,7 @@ if __name__ == "__main__":
                 # plt.draw(); plt.pause(0.001)
                 last_viz_t = now_viz
                 if STEP_config['Capturing']:
-                    path = os.path.join(base, "record/finalcombine_3", args.name)
+                    path = os.path.join(base, "record/finalmean_3", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -750,7 +610,7 @@ if __name__ == "__main__":
     
     # path to your “master” stats file
     os.chdir(base)
-    stats_file = os.path.join(base, "record/finalcombine_stats_3.json")
+    stats_file = os.path.join(base, "record/finalmean_stats_3.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
