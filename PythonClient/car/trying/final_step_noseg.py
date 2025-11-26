@@ -4,7 +4,7 @@ import open3d as o3d
 import numpy.ma as ma
 import matplotlib.pyplot as plt
 from scipy.stats import binned_statistic_2d
-from scipy.ndimage import distance_transform_edt, binary_dilation, generate_binary_structure, convolve
+from scipy.ndimage import distance_transform_edt, binary_dilation, generate_binary_structure
 from scipy.ndimage import label as _label
 from scipy.spatial import cKDTree
 from matplotlib.colors import LinearSegmentedColormap
@@ -13,15 +13,30 @@ from linefit import ground_seg
 from function5 import *
 import casadi as ca
 from skimage.graph import route_through_array
-base = os.path.dirname(__file__)        
-project_root = base
-print(project_root)
-rand_dir = os.path.join(project_root, "rand")
-os.chdir(rand_dir)
 
-from predict1 import RandlaGroundSegmentor
-from scipy.interpolate import CubicSpline
+class GridMap:
+    def __init__(self, resolution):
+        self.resolution = resolution
+        # Store (sum, count) per cell
+        self.grid = {}
 
+    def get_grid_cell(self, x, y):
+        return (round(x / self.resolution, 1), round(y / self.resolution, 1))
+
+    def add_point(self, x, y, z, timestamp):
+        cell = self.get_grid_cell(x, y)
+        if cell not in self.grid:
+            self.grid[cell] = [z, 1]
+        else:
+            self.grid[cell][0] += z
+            self.grid[cell][1] += 1
+
+    def get_height_estimate(self):
+        estimates = []
+        for (gx, gy), (z_sum, count) in self.grid.items():
+            mean_z = float(z_sum/count)
+            estimates.append([gx * self.resolution, gy * self.resolution, mean_z])
+        return np.array(estimates)
 def fuse_geom_edge_preserving(step_risk, slope_risk, tau=0.35,        # edge threshold
                               beta=1.0):       # how much slope you allow in flat areas
     """
@@ -40,8 +55,6 @@ def fuse_geom_edge_preserving(step_risk, slope_risk, tau=0.35,        # edge thr
     # fused = max(step, beta * gate * slope)
     fused = np.where(m, np.maximum(step, beta * gate * slope), np.nan)
     return fused
-
-
 def path_cost(path_idx, cost_map):
     if path_idx is None:
         return float('inf')
@@ -53,45 +66,6 @@ def path_cost(path_idx, cost_map):
         else:
             total += 1e6  # off-grid = very expensive
     return total
-
-class GridMap:
-    def __init__(self, resolution):
-        self.resolution = resolution
-        # Store (sum, count) per cell
-        self.grid = {}
-
-    def get_grid_cell(self, x, y):
-        return (int(np.floor(x / self.resolution)), int(np.floor(y / self.resolution)))
-
-
-    def add_point(self, x, y, z, label):
-        cell = self.get_grid_cell(x, y)
-        if cell not in self.grid:
-            self.grid[cell] = [z, label, 1]
-        else:
-            self.grid[cell][0] += z
-            self.grid[cell][1] += label
-            self.grid[cell][2] += 1
-
-    def get_height_estimate(self):
-        height_estimates = []
-        label_estimates = []
-        for (gx, gy), (z_sum, label_sum, count) in self.grid.items():
-            mean_z = float(z_sum/count)
-            mean_label = float(label_sum/count)
-            cx = (gx + 0.5) * self.resolution
-            cy = (gy + 0.5) * self.resolution
-            height_estimates.append([cx, cy, mean_z])
-            label_estimates.append([cx, cy, mean_label])
-        return np.array(height_estimates), np.array(label_estimates)
-    def prune_far(self, cx, cy, max_radius_cells):
-        to_del = []
-        for (gx, gy) in self.grid.keys():
-            if (gx - cx)**2 + (gy - cy)**2 > max_radius_cells**2:
-                to_del.append((gx, gy))
-        for k in to_del:
-            del self.grid[k]
-
 
 STEP_config ={
     # MAP
@@ -106,7 +80,7 @@ STEP_config ={
 
     'step_weight': 2.0,
     'slope_weight': 2.0,
-    'z_norm_weight': 2.0,
+
     'interpolate_radius': 1.5,
     'cvar_a': 0.5,
     'cvar_radius': 4.0,
@@ -126,10 +100,6 @@ STEP_config ={
     'visualize': True,
     'Capturing': True,
     'MAX_ITER': 350,
-    'flip_cooldown_s': 2.0,           # lock temp goal for this long after a switch
-    'min_improve_dist_m': 0.8,        # must get at least this much closer to final goal
-    'min_improve_risk': 5.0,          # and reduce risk by this much to justify switching
-    'max_flip_per_min': 6,            # anti-oscillation rate limit
 }
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -140,9 +110,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     lidar_test = lidarTest('gpulidar1', 'CPHusky')
     lidar_test.client.enableApiControl(True, 'CPHusky')
-    seg = RandlaGroundSegmentor(device=None, subsample_grid=0.1)
     STEP_config['MAX_ITER'] = int(args.maxiter)
-    
+
+    # Initialize ground segmentation.
+    base = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
+
     # Map setup:
     pos, _ = lidar_test.get_vehicle_pose()
     start_point = pos[:2]
@@ -150,6 +122,7 @@ if __name__ == "__main__":
     x_edges, y_edges, x_mid, y_mid = get_map_setting(start_point, destination_point, margin=STEP_config['grid_margin'], grid_resolution=STEP_config['grid_resolution'])
     X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
     grid_map_ground = GridMap(resolution=STEP_config['grid_resolution'])
+    grid_map_obstacle = GridMap(resolution=STEP_config['grid_resolution'])
 
     # Setup NMPC and plot
     nmpc = NMPCController(horizon=STEP_config['N-npmc'],
@@ -157,6 +130,7 @@ if __name__ == "__main__":
                           V_max=STEP_config['Vmax-nmpc'],
                           delta_max=np.deg2rad(STEP_config['delta-nmpc']))
     ctr = airsim.CarControls()
+
     if STEP_config['visualize']:
         colors = [
             (0.5, 0.5, 0.5),  # gray
@@ -202,6 +176,7 @@ if __name__ == "__main__":
             if point_cloud_data is None:
                 continue
             
+            # Process point cloud.
             points = np.asarray(point_cloud_data[:, :3])
             points = points[np.linalg.norm(points, axis=1) > 0.6]
             pos, R = lidar_test.get_vehicle_pose()
@@ -227,6 +202,7 @@ if __name__ == "__main__":
 
                 ### NEW: remap old mask/values into the new grid coordinates
                 new_shape = (len(x_mid), len(y_mid))
+                
                 remapped_prev_risk = remap_values(
                     old_prev_risk, old_x_mid, old_y_mid,
                     x_edges, y_edges, new_shape, reducer=np.nanmax
@@ -238,23 +214,20 @@ if __name__ == "__main__":
             stats_dict['total_length'].append(distance_travelled)
             last_pos = veh_xy.copy() 
 
-            points_world = lidar_test.transform_to_world(points, pos.astype(points.dtype), R)
-            points_world[:, 2] = -points_world[:, 2]
+            points_world = lidar_test.transform_to_world(points, pos, R)
+            points_world[:, 2] = -points_world[:, 2] 
             
-            # Use network outputs
-            labels, all_probs = seg.segment(points_world)   # labels: [M], all_probs: [M, C]
+
+            # Populate grid maps based on segmentation.
             for i, point in enumerate(points_world):
                 x, y, z = point
-                grid_map_ground.add_point(x, y, z, labels[i])
-            ground_points, label_points = grid_map_ground.get_height_estimate()
+                grid_map_ground.add_point(x, y, z, timestamp)
+
+            ground_points = grid_map_ground.get_height_estimate()
             if ground_points.size == 0: continue
             Z_ground, _, _, _ = binned_statistic_2d(
                 ground_points[:, 0], ground_points[:, 1], ground_points[:, 2], statistic='mean', bins=[x_edges, y_edges]
             )
-            randla_risk_grid, _, _, _ = binned_statistic_2d(
-                label_points[:,0], label_points[:,1], label_points[:,2], statistic='mean', bins=[x_edges, y_edges]
-            )
-
 
             # Calculate risk grids.
             non_nan_indices = np.argwhere(~np.isnan(Z_ground))
@@ -263,13 +236,14 @@ if __name__ == "__main__":
             )
             geom_risk01 = fuse_geom_edge_preserving(step_risk_grid, slope_risk_grid, tau=0.35, beta=1.0)
             geom_risk_grid = np.clip(geom_risk01 * STEP_config['MAX_RTSK_VALUE'], 0, STEP_config['MAX_RTSK_VALUE'])
-
-            total_risk_grid = np.maximum(geom_risk_grid, randla_risk_grid)
+            total_risk_grid = geom_risk_grid.copy()
             total_risk_grid = interpolate_in_radius(total_risk_grid, STEP_config['interpolate_radius'])
             masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-            risk_grid = compute_cvar_cellwise(masked_total_risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
-            risk_grid = np.nan_to_num(risk_grid, nan=25.0)
+            risk_grid = compute_cvar_cellwise(masked_total_risk_grid,
+                                            alpha=STEP_config['cvar_a'],
+                                            radius=STEP_config['cvar_radius'])
             nan_mask_initial = np.isnan(risk_grid)
+
 
             # Calculate distance from vehicle and ensure mask shape matches grid shape after any recentering
             distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
@@ -279,7 +253,12 @@ if __name__ == "__main__":
                 else:
                     X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
                     distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
-            
+
+            # Carry over previous values inside persistent annulus into current NaNs (shape-safe)
+            if 'prev_risk_grid' in locals() and prev_risk_grid is not None and prev_risk_grid.shape == risk_grid.shape:
+                carry_mask = nan_mask_initial 
+                risk_grid[carry_mask] = prev_risk_grid[carry_mask]
+
             prev_risk_grid = risk_grid.copy()
             risk_grid = np.nan_to_num(risk_grid, nan=25.0)
             trigger_temp_dest = False
@@ -500,7 +479,7 @@ if __name__ == "__main__":
             except Exception:
                 v_cmd, d_cmd = (0.0, 0.0)
 
-            # 3) desired heading from path tangent (fix #4)
+            # 3) desired heading from path tangent
             LOOKAHEAD_STEPS = 4
             j = min(i0 + LOOKAHEAD_STEPS, len(smoothed_path) - 1)
             dx = smoothed_path[j,0] - smoothed_path[i0,0]
@@ -553,7 +532,7 @@ if __name__ == "__main__":
                 # plt.draw(); plt.pause(0.001)
                 last_viz_t = now_viz
                 if STEP_config['Capturing']:
-                    path = os.path.join(base, "record/finalmax_3", args.name)
+                    path = os.path.join(base, "record/finalstepnoseg_3", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -610,7 +589,7 @@ if __name__ == "__main__":
     
     # path to your “master” stats file
     os.chdir(base)
-    stats_file = os.path.join(base, "record/finalmax_stats_3.json")
+    stats_file = os.path.join(base, "record/finalstepnoseg_stats_3.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:

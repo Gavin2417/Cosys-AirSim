@@ -266,11 +266,6 @@ if __name__ == "__main__":
                     X, Y = np.meshgrid(x_mid, y_mid, indexing='ij')
                     distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)
 
-            # Carry over previous values inside persistent annulus into current NaNs (shape-safe)
-            if 'prev_risk_grid' in locals() and prev_risk_grid is not None and prev_risk_grid.shape == risk_grid.shape:
-                carry_mask = nan_mask_initial 
-                risk_grid[carry_mask] = prev_risk_grid[carry_mask]
-
             prev_risk_grid = risk_grid.copy()
             risk_grid = np.nan_to_num(risk_grid, nan=25.0)
             trigger_temp_dest = False
