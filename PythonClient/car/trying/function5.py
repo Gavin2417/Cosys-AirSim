@@ -126,7 +126,7 @@ def compute_cvar_cellwise(risk_grid, alpha=0.2, radius=5.0):
 class lidarTest:
     def __init__(self, lidar_name, vehicle_name):
         # self.client = airsim.CarClient(ip="100.123.124.103")
-        self.client = airsim.CarClient(ip="192.168.68.101")
+        self.client = airsim.CarClient(ip="192.168.68.102")
         # print("Connected to client")
         self.client.confirmConnection()
         # print("Confirmed connection")

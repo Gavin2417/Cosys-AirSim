@@ -81,7 +81,7 @@ STEP_config ={
     'HIGH_RISK': 0.6,
     'MAX_RTSK_VALUE': 50,
     'visualize': True,
-    'Capturing': True,
+    'Capturing': False,
     'MAX_ITER': 350,
 }
 if __name__ == '__main__':
@@ -478,10 +478,10 @@ if __name__ == '__main__':
                 else:
                     colorbar.update_normal(c)
                 colorbar.set_ticks(np.linspace(0, STEP_config['MAX_RTSK_VALUE'], 6))  # 0,10,...,50
-                ax.scatter(vehicle_y, vehicle_x, c='green', s=35, label='Vehicle')
-                ax.scatter(destination_point[1], destination_point[0], c='red', s=50, label='Goal')
+                ax.scatter(vehicle_y, vehicle_x, c='green', s=60, label='Vehicle')
+                ax.scatter(destination_point[1], destination_point[0], c='red', s=60, label='Goal')
                 # heading arrow (plot axes are Y on X-axis, X on Y-axis)
-                arrow_len = 0.9
+                arrow_len = 1.2
                 dx = np.sin(psi0)
                 dy = np.cos(psi0)
                 dx, dy = (dx, dy) / np.hypot(dx, dy) * arrow_len  # normalize for consistency
@@ -489,19 +489,21 @@ if __name__ == '__main__':
                 ax.quiver(vehicle_y, vehicle_x, dx, dy,
                         angles='xy', scale_units='xy', scale=1.0,
                         color='green', width=0.012,
-                        pivot='tail', headwidth=5, headlength=5, headaxislength=5)
+                        pivot='tail', headwidth=8, headlength=8, headaxislength=8)
 
                 ax.set_aspect('equal', adjustable='box')
                 if temp_dest_xy is not None:
                     ax.scatter(temp_dest_xy[1], temp_dest_xy[0], c='black', s=30, marker='s',
                                linewidth=0.15, label='Temp Goal')
-                ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='Smoothed A* Path')
-                ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
-                # ax.legend()
-                # plt.draw(); plt.pause(0.001)
+                ax.plot(smoothed_path[:,1], smoothed_path[:,0], color='blue', linewidth=2, label='A* Path')
+                # ax.plot(ref_pts[:,1], ref_pts[:,0], 'r--', linewidth=1, label='Reference Trajectory')
+                ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=3)
+                plt.subplots_adjust(bottom=0.2)
+                plt.draw(); plt.pause(0.001)
+                # last_viz_t = now_viz
                 last_viz_t = now_viz
                 if STEP_config['Capturing']:
-                    path = os.path.join(base, "record/finalrandla_3", args.name)
+                    path = os.path.join(base, "record/finalrandla_4", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -556,30 +558,30 @@ if __name__ == '__main__':
         print("--------------Done--------------")
 
     
-    # path to your “master” stats file
-    os.chdir(base)
-    stats_file = os.path.join(base, "record/finalrandla_stats_3.json")
-    all_runs = []
-    if os.path.exists(stats_file):
-        with open(stats_file, "r") as f:
-            all_runs = json.load(f)
-    len_run = len(all_runs)
-    # append this run’s stats
-    all_runs.append({
-        "num": len(all_runs) + 1,
-        "reach_goal": stats_dict['reach_goal'],
-        "start_point": start_point.tolist(),        # e.g. [x0, y0]
-        "goal_point": destination_point.tolist(),   # e.g. [xg, yg]
-        "count": stats_dict["count"],
-        "collision_count": stats_dict["collision_count"],
-        "total_length": stats_dict["total_length"],
-        "dist_to_goal": stats_dict["dist_to_goal"],
-        "current_pos": stats_dict["current_pos"],
-        "collision_info": stats_dict["collision_info"]
-    })
+    # # path to your “master” stats file
+    # os.chdir(base)
+    # stats_file = os.path.join(base, "record/finalrandla_stats_4.json")
+    # all_runs = []
+    # if os.path.exists(stats_file):
+    #     with open(stats_file, "r") as f:
+    #         all_runs = json.load(f)
+    # len_run = len(all_runs)
+    # # append this run’s stats
+    # all_runs.append({
+    #     "num": len(all_runs) + 1,
+    #     "reach_goal": stats_dict['reach_goal'],
+    #     "start_point": start_point.tolist(),        # e.g. [x0, y0]
+    #     "goal_point": destination_point.tolist(),   # e.g. [xg, yg]
+    #     "count": stats_dict["count"],
+    #     "collision_count": stats_dict["collision_count"],
+    #     "total_length": stats_dict["total_length"],
+    #     "dist_to_goal": stats_dict["dist_to_goal"],
+    #     "current_pos": stats_dict["current_pos"],
+    #     "collision_info": stats_dict["collision_info"]
+    # })
 
-    if STEP_config['Capturing']:
-        with open(stats_file, "w") as f:
-            json.dump(all_runs, f, indent=2)
+    # if STEP_config['Capturing']:
+    #     with open(stats_file, "w") as f:
+    #         json.dump(all_runs, f, indent=2)
 
-    print(f"Saved stats for this run")
+    # print(f"Saved stats for this run")

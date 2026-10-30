@@ -152,7 +152,7 @@ STEP_config ={
     'MAX_RTSK_VALUE': 50,
     'visualize': True,
     'Capturing': True,
-    'MAX_ITER': 500,
+    'MAX_ITER': 800,
 }
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -376,11 +376,11 @@ if __name__ == "__main__":
 
             # Fill remaining NaNs to mid risk within the distanc eignored
             
-            # risk_grid = np.nan_to_num(risk_grid, nan=25.0)
-            nan_mask   = np.isnan(risk_grid)
-            near_mask  = (distance_from_vehicle < STEP_config['distance_ignored'])
-            fill_mask  = nan_mask & near_mask
-            risk_grid[fill_mask] = 25.0
+            risk_grid = np.nan_to_num(risk_grid, nan=25.0)
+            # nan_mask   = np.isnan(risk_grid)
+            # near_mask  = (distance_from_vehicle < STEP_config['distance_ignored'])
+            # fill_mask  = nan_mask & near_mask
+            # risk_grid[fill_mask] = 25.0
             with np.errstate(invalid='ignore'):
                 max_val  = STEP_config['MAX_RTSK_VALUE']
 
@@ -632,7 +632,7 @@ if __name__ == "__main__":
                 # plt.draw(); plt.pause(0.001)
                 last_viz_t = now_viz
                 if STEP_config['Capturing']:
-                    path = os.path.join(base, "record/test_10", args.name)
+                    path = os.path.join(base, "record/test_11", args.name)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     plt.savefig(os.path.join(path, f'{stats_dict["count"]}.png'))
@@ -676,7 +676,7 @@ if __name__ == "__main__":
     
     # path to your “master” stats file
     os.chdir(base)
-    stats_file = os.path.join(base, "record/test_stats_10.json")
+    stats_file = os.path.join(base, "record/test_stats_11.json")
     all_runs = []
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:

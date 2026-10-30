@@ -21,6 +21,52 @@ from predict1 import RandlaGroundSegmentor
 
 import numpy as np
 
+def robust_unit(x, qlo=5, qhi=95):
+    """Robustly scale to [0,1] using percentiles; preserves NaNs."""
+    lo = np.nanpercentile(x, qlo); hi = np.nanpercentile(x, qhi)
+    y = (x - lo) / (hi - lo + 1e-9)
+    y = np.clip(y, 0, 1)
+    y[np.isnan(x)] = np.nan
+    return y
+
+def fuse_noisy_or(p_geom, p_sem, beta_geom=1.0, beta_sem=1.0):
+    """Conservative: hazard if either source is high."""
+    g = np.nan_to_num(p_geom, nan=0.0)**beta_geom
+    s = np.nan_to_num(p_sem,  nan=0.0)**beta_sem
+    fused = 1.0 - (1.0 - g) * (1.0 - s)
+    fused[np.isnan(p_geom) & np.isnan(p_sem)] = np.nan
+    return fused
+
+def fuse_logit(p_geom, p_sem, w_geom=1.0, w_sem=1.0, b=0.0):
+    """Smooth, tunable compromise in log-odds space."""
+    eps = 1e-6
+    def to_logit(p):
+        p = np.nan_to_num(p, nan=0.5)
+        p = np.clip(p, eps, 1-eps)
+        return np.log(p/(1-p))
+    def sigmoid(z): return 1/(1+np.exp(-z))
+    z = w_geom*to_logit(p_geom) + w_sem*to_logit(p_sem) + b
+    fused = sigmoid(z)
+    fused[np.isnan(p_geom) & np.isnan(p_sem)] = np.nan
+    return fused
+
+def fuse_softmax_pool(p_geom, p_sem, tau=0.25):
+    """Soft max: approaches max as tau→0, mean as tau→∞."""
+    g = np.nan_to_num(p_geom, nan=0.0); s = np.nan_to_num(p_sem, nan=0.0)
+    e1, e2 = np.exp(g/(tau+1e-9)), np.exp(s/(tau+1e-9))
+    w1 = e1/(e1+e2+1e-9); w2 = 1.0 - w1
+    fused = w1*g + w2*s
+    fused[np.isnan(p_geom) & np.isnan(p_sem)] = np.nan
+    return fused
+
+def fuse_harmonic(p_geom, p_sem):
+    """Penalizes disagreement; rewards agreement."""
+    g = np.nan_to_num(p_geom, nan=0.0); s = np.nan_to_num(p_sem, nan=0.0)
+    fused = 2*g*s/(g+s+1e-9)
+    fused[np.isnan(p_geom) & np.isnan(p_sem)] = np.nan
+    return fused
+
+
 class GridMap:
     def __init__(self, resolution):
         self.resolution = resolution
@@ -87,6 +133,105 @@ class GridMap:
             labels_out.append([cx, cy, float(exp_lbl)])
         return np.array(out), np.array(labels_out)
 
+def make_hazard_table(num_classes=51, default=0.3, overrides=None):
+    H = np.full(num_classes, default, dtype=float)
+    if overrides:
+        for k, v in overrides.items():
+            H[k] = float(v)
+    return H
+
+def grid_semantic_risk(grid_map: GridMap, x_edges, y_edges, H, alpha0=2.0, priors=None, k0=15):
+    # priors: optional class prior pi_c (len==len(H))
+    C = len(H)
+    if priors is None:
+        priors = np.full(C, 1.0/C)
+    # bins
+    nx, ny = len(x_edges)-1, len(y_edges)-1
+    p_sem = np.full((nx, ny), np.nan, dtype=float)
+    conf_sem = np.full((nx, ny), np.nan, dtype=float)
+
+    # helper: map (gx,gy) to grid indices i,j
+    res = grid_map.resolution
+
+    for (gx, gy), rec in grid_map.grid.items():
+        # center coords of that cell
+        cx = (gx + 0.5) * res
+        cy = (gy + 0.5) * res
+        # find i,j bin for center
+        i = np.searchsorted(x_edges, cx) - 1
+        j = np.searchsorted(y_edges, cy) - 1
+        if i < 0 or i >= nx or j < 0 or j >= ny:
+            continue
+
+        counts = rec['label_counts']
+        N = float(rec['total_count'])
+        if N <= 0: 
+            continue
+
+        # assemble count vector
+        n = np.zeros_like(H, dtype=float)
+        for lbl, cnt in counts.items():
+            if 0 <= lbl < len(n):
+                n[lbl] += cnt
+
+        # Dirichlet-regularized posterior weights over classes
+        w = (n + alpha0 * priors) / (N + alpha0)
+
+        # semantic risk probability in [0,1]
+        p = float(np.dot(w, H))
+        # confidence: mix ESS and concentration (1 - normalized entropy)
+        eps = 1e-9
+        entropy = -np.sum(np.where(w>0, w*np.log(w+eps), 0.0))
+        max_ent = np.log(len(H))
+        conc = 1.0 - (entropy / (max_ent + eps))  # 0 (diffuse) → 1 (peaked)
+
+        ess_term = N / (N + k0)
+        gamma = np.clip(0.5*ess_term + 0.5*conc, 0.0, 1.0)
+
+        p_sem[i, j] = p
+        conf_sem[i, j] = gamma
+
+    return p_sem, conf_sem
+def geom_prob_and_conf(total_risk_grid, step_risk_grid, slope_risk_grid, 
+                       support_count_grid=None, support_k0=20):
+    # prob
+    p_geom = robust_unit(total_risk_grid, qlo=5, qhi=95)  # already in your codebase
+
+    # agreement in [0,1]
+    agree = 1.0 - np.abs(step_risk_grid - slope_risk_grid)
+    agree = np.where(np.isnan(step_risk_grid) | np.isnan(slope_risk_grid), np.nan, agree)
+
+    # support/confidence from point counts if available (scaled to [0,1])
+    if support_count_grid is not None:
+        # normalize by a robust scale so 95th pct → ~1.0
+        cmax = np.nanpercentile(support_count_grid, 95) + 1e-9
+        supp = np.clip(support_count_grid / cmax, 0, 1)
+    else:
+        supp = np.ones_like(p_geom)
+
+    # combine (equal weights); fall back to supp if agree is NaN
+    conf_geom = np.where(np.isnan(agree), supp, 0.5*supp + 0.5*agree)
+
+    # restore NaNs where prob is NaN
+    conf_geom[np.isnan(p_geom)] = np.nan
+    return p_geom, conf_geom
+def randla_prob_conf(med_grid, std_grid, cnt_grid, k0=15):
+    # probability
+    p_sem = med_grid / 50.0
+    # if you prefer robust percentile scaling across the frame, uncomment:
+    # p_sem = robust_unit(med_grid, qlo=5, qhi=95)
+
+    # confidence = support * (1 - normalized dispersion)
+    # normalize std; 25 ~ half of 0..50 range
+    disp = np.clip(np.nan_to_num(std_grid, nan=25.0) / 25.0, 0.0, 1.0)
+    supp = cnt_grid / (cnt_grid + k0)            # ESS-like term, k0 tunes conservatism
+    conf_sem = supp * (1.0 - disp)
+
+    # handle NaNs
+    conf_sem[np.isnan(p_sem)] = np.nan
+    return p_sem, conf_sem
+
+# p_sem_grid, conf_sem_grid = randla_prob_conf(randla_med, randla_std, randla_cnt, k0=15)
 
     
 STEP_config ={
@@ -233,15 +378,30 @@ if __name__ == "__main__":
             Z_ground, _, _, _ = binned_statistic_2d(
                 ground_points[:, 0], ground_points[:, 1], ground_points[:, 2], statistic='mean', bins=[x_edges, y_edges]
             )
-            randla_risk_grid, _, _, _ = binned_statistic_2d(
-                label_points[:,0], label_points[:,1], label_points[:,2], statistic='mean', bins=[x_edges, y_edges]
+            randla_med, _, _, _ = binned_statistic_2d(
+                label_points[:,0], label_points[:,1], label_points[:,2],
+                statistic='median', bins=[x_edges, y_edges]
             )
-
+            randla_std, _, _, _ = binned_statistic_2d(
+                label_points[:,0], label_points[:,1], label_points[:,2],
+                statistic='std', bins=[x_edges, y_edges]
+            )
+            randla_cnt, _, _, _ = binned_statistic_2d(
+                label_points[:,0], label_points[:,1], label_points[:,2],
+                statistic='count', bins=[x_edges, y_edges]
+            )
+            ground_cnt, _, _, _ = binned_statistic_2d(
+                ground_points[:,0], ground_points[:,1], ground_points[:,2],
+                statistic='count', bins=[x_edges, y_edges]
+            )
+            p_sem_grid, conf_sem_grid = randla_prob_conf(randla_med, randla_std, randla_cnt, k0=15)
             # Calculate risk grids.
             non_nan_indices = np.argwhere(~np.isnan(Z_ground))
             step_risk_grid, slope_risk_grid = calculate_combined_risks(
                 Z_ground, non_nan_indices, max_height_diff=STEP_config['max_height_diff'], max_slope_degrees=STEP_config['max_slope_degrees'], radius=STEP_config['risk_radius']
             )
+            
+            
             combined_mask = np.isnan(step_risk_grid) & np.isnan(slope_risk_grid)
             masked_step_risk = np.ma.masked_array(step_risk_grid, mask=combined_mask) * STEP_config['step_weight']
             masked_slope_risk = np.ma.masked_array(slope_risk_grid, mask=combined_mask) * STEP_config['slope_weight']
@@ -255,14 +415,28 @@ if __name__ == "__main__":
             mask = total_risk_grid > threshold
             # capo
             total_risk_grid[mask] = np.exp(total_risk_grid[mask])
+            p_geom_grid, conf_geom_grid = geom_prob_and_conf(
+                total_risk_grid, masked_step_risk, masked_slope_risk, support_count_grid=ground_cnt
+            )
 
 
+            # geom = robust_unit(total_risk_grid)
+            # sem  = robust_unit(randla_risk_grid)
 
-            total_risk_grid = (total_risk_grid+ randla_risk_grid) / 2.0
-            total_risk_grid = interpolate_in_radius(total_risk_grid, STEP_config['interpolate_radius'])
+            # # Conservative (hazard if either is high)
+            fused_prob = fuse_logit(
+                p_geom_grid, p_sem_grid,
+                w_geom=np.nan_to_num(conf_geom_grid, nan=0.0),
+                w_sem =np.nan_to_num(conf_sem_grid,  nan=0.0),
+                b=0.0,   # ↑b to be more conservative overall
+            )
+
+            # fused = fuse_noisy_or(geom, sem, beta_geom=1.0, beta_sem=1.2)*50
+            total_risk_grid = interpolate_in_radius(fused_prob, STEP_config['interpolate_radius'])
             masked_total_risk_grid = ma.masked_invalid(total_risk_grid)
-            risk_grid = compute_cvar_cellwise(masked_total_risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
-            risk_grid = risk_grid.filled(25)
+            risk_prob = compute_cvar_cellwise(masked_total_risk_grid, alpha=STEP_config['cvar_a'], radius=STEP_config['cvar_radius'])
+            risk_prob = np.nan_to_num(risk_prob, nan=0.5)      # [0,1]
+            risk_grid = 50.0 * risk_prob 
 
             # Mask cells far from the vehicle.
             distance_from_vehicle = np.sqrt((X - vehicle_x)**2 + (Y - vehicle_y)**2)

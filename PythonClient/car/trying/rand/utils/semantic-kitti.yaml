@@ -1,39 +1,217 @@
-# This file is covered by the LICENSE file in the root of this project.
-labels: 
-  0 : "unlabeled"
-  1 : "outlier"
-  10: "car"
-  11: "bicycle"
-  13: "bus"
-  15: "motorcycle"
-  16: "on-rails"
-  18: "truck"
-  20: "other-vehicle"
-  30: "person"
-  31: "bicyclist"
-  32: "motorcyclist"
-  40: "road"
-  44: "parking"
-  48: "sidewalk"
-  49: "other-ground"
-  50: "building"
-  51: "fence"
-  52: "other-structure"
-  60: "lane-marking"
-  70: "vegetation"
-  71: "trunk"
-  72: "terrain"
-  80: "pole"
-  81: "traffic-sign"
-  99: "other-object"
-  252: "moving-car"
-  253: "moving-bicyclist"
-  254: "moving-person"
-  255: "moving-motorcyclist"
-  256: "moving-on-rails"
-  257: "moving-bus"
-  258: "moving-truck"
-  259: "moving-other-vehicle"
+labels:
+  0 : "risk_0"
+  1 : "risk_1"
+  2 : "risk_2"
+  3 : "risk_3"
+  4 : "risk_4"
+  5 : "risk_5"
+  6 : "risk_6"
+  7 : "risk_7"
+  8 : "risk_8"
+  9 : "risk_9"
+  10 : "risk_10"
+  11 : "risk_11"
+  12 : "risk_12"
+  13 : "risk_13"
+  14 : "risk_14"
+  15 : "risk_15"
+  16 : "risk_16"
+  17 : "risk_17"
+  18 : "risk_18"
+  19 : "risk_19"
+  20 : "risk_20"
+  21 : "risk_21"
+  22 : "risk_22"
+  23 : "risk_23"
+  24 : "risk_24"
+  25 : "risk_25"
+  26 : "risk_26"
+  27 : "risk_27"
+  28 : "risk_28"
+  29 : "risk_29"
+  30 : "risk_30"
+  31 : "risk_31"
+  32 : "risk_32"
+  33 : "risk_33"
+  34 : "risk_34"
+  35 : "risk_35"
+  36 : "risk_36"
+  37 : "risk_37"
+  38 : "risk_38"
+  39 : "risk_39"
+  40 : "risk_40"
+  41 : "risk_41"
+  42 : "risk_42"
+  43 : "risk_43"
+  44 : "risk_44"
+  45 : "risk_45"
+  46 : "risk_46"
+  47 : "risk_47"
+  48 : "risk_48"
+  49 : "risk_49"
+  50: "risk_50"
+
+learning_map:
+  0 : 0
+  1 : 1
+  2 : 2
+  3 : 3
+  4 : 4
+  5 : 5
+  6 : 6
+  7 : 7
+  8 : 8
+  9 : 9
+  10 : 10
+  11 : 11
+  12 : 12
+  13 : 13
+  14 : 14
+  15 : 15
+  16 : 16
+  17 : 17
+  18 : 18
+  19 : 19
+  20 : 20
+  21 : 21
+  22 : 22
+  23 : 23
+  24 : 24
+  25 : 25
+  26 : 26
+  27 : 27
+  28 : 28
+  29 : 29
+  30 : 30
+  31 : 31
+  32 : 32
+  33 : 33
+  34 : 34
+  35 : 35
+  36 : 36
+  37 : 37
+  38 : 38
+  39 : 39
+  40 : 40
+  41 : 41
+  42 : 42
+  43 : 43
+  44 : 44
+  45 : 45
+  46 : 46
+  47 : 47
+  48 : 48
+  49 : 49
+  50: 50
+
+# 3. Inverse map (used for saving results back to .label files)
+learning_map_inv:
+  0 : 0
+  1 : 1
+  2 : 2
+  3 : 3
+  4 : 4
+  5 : 5
+  6 : 6
+  7 : 7
+  8 : 8
+  9 : 9
+  10 : 10
+  11 : 11
+  12 : 12
+  13 : 13
+  14 : 14
+  15 : 15
+  16 : 16
+  17 : 17
+  18 : 18
+  19 : 19
+  20 : 20
+  21 : 21
+  22 : 22
+  23 : 23
+  24 : 24
+  25 : 25
+  26 : 26
+  27 : 27
+  28 : 28
+  29 : 29
+  30 : 30
+  31 : 31
+  32 : 32
+  33 : 33
+  34 : 34
+  35 : 35
+  36 : 36
+  37 : 37
+  38 : 38
+  39 : 39
+  40 : 40
+  41 : 41
+  42 : 42
+  43 : 43
+  44 : 44
+  45 : 45
+  46 : 46
+  47 : 47
+  48 : 48
+  49 : 49
+  50: 50
+
+# 4. Learning Ignore (Crucial!)
+# True = Ignore this class in Loss calculation. False = Train on it.
+learning_ignore:
+  0 : False 
+  1 : False
+  2 : False
+  3 : False
+  4 : False
+  5 : False
+  6 : False
+  7 : False
+  8 : False
+  9 : False
+  10 : False
+  11 : False
+  12 : False
+  13 : False
+  14 : False
+  15 : False
+  16 : False
+  17 : False
+  18 : False
+  19 : False
+  20 : False
+  21 : False
+  22 : False
+  23 : False
+  24 : False
+  25 : False
+  26 : False
+  27 : False
+  28 : False
+  29 : False
+  30 : False
+  31 : False
+  32 : False
+  33 : False
+  34 : False
+  35 : False
+  36 : False
+  37 : False
+  38 : False
+  39 : False
+  40 : False
+  41 : False
+  42 : False
+  43 : False
+  44 : False
+  45 : False
+  46 : False
+  47 : False
+  48 : False
+  49 : False
+  50: False
 color_map: # bgr
   0 : [0, 0, 0]
   1 : [0, 0, 255]
@@ -162,27 +340,27 @@ learning_map_inv: # inverse of previous map
   17: 72    # "terrain"
   18: 80    # "pole"
   19: 81    # "traffic-sign"
-learning_ignore: # Ignore classes
-  0: True      # "unlabeled", and others ignored
-  1: False     # "car"
-  2: False     # "bicycle"
-  3: False     # "motorcycle"
-  4: False     # "truck"
-  5: False     # "other-vehicle"
-  6: False     # "person"
-  7: False     # "bicyclist"
-  8: False     # "motorcyclist"
-  9: False     # "road"
-  10: False    # "parking"
-  11: False    # "sidewalk"
-  12: False    # "other-ground"
-  13: False    # "building"
-  14: False    # "fence"
-  15: False    # "vegetation"
-  16: False    # "trunk"
-  17: False    # "terrain"
-  18: False    # "pole"
-  19: False    # "traffic-sign"
+# learning_ignore: # Ignore classes
+#   0: True      # "unlabeled", and others ignored
+#   1: False     # "car"
+#   2: False     # "bicycle"
+#   3: False     # "motorcycle"
+#   4: False     # "truck"
+#   5: False     # "other-vehicle"
+#   6: False     # "person"
+#   7: False     # "bicyclist"
+#   8: False     # "motorcyclist"
+#   9: False     # "road"
+#   10: False    # "parking"
+#   11: False    # "sidewalk"
+#   12: False    # "other-ground"
+#   13: False    # "building"
+#   14: False    # "fence"
+#   15: False    # "vegetation"
+#   16: False    # "trunk"
+#   17: False    # "terrain"
+#   18: False    # "pole"
+#   19: False    # "traffic-sign"
 split: # sequence numbers
   train:
     - 0
